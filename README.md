@@ -65,6 +65,11 @@ tests/                node:test suites for colour maths, mixing and calibration
 
 ## Accuracy
 
+Every starting point is a practical, mixable sample recipe built from the listed materials for
+test-card trials—not a hypothetical colour concept. The ratios are generic, not manufacturer
+formulas; use your paint system's technical data sheet (TDS) for binder, reducer, hardener, and
+application.
+
 Out of the box the toners are generic, so treat colours as a guide. To make them match your
 materials:
 
