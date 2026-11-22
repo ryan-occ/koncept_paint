@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:browser": "node --experimental-strip-types --test tests/browser.test.ts"
   },
   "dependencies": {
     "@types/node": "^22.20.5",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@types/three": "^0.170.0",
+    "playwright": "^1.65.1",
     "typescript": "^5.9.3",
     "vite": "^6.4.6"
   },

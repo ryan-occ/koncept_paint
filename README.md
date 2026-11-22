@@ -11,9 +11,12 @@ your own materials.
 ```bash
 npm install
 npm run dev        # local dev server
-npm test           # colour-maths tests (Node 22.6+, no install needed)
+npm test           # unit + browser regression tests (Node 22.6+ and Chromium)
 npm run build      # type-check + production build into dist/
 ```
+
+If Chromium is not already installed, install the browser used by the regression tests with
+`npx playwright install chromium`.
 
 The build uses relative paths, so `dist/` can be hosted anywhere (GitHub Pages, Netlify, a
 shop PC).
