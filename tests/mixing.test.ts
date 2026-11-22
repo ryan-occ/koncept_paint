@@ -46,5 +46,7 @@ test('candy coats darken the colour', () => {
 });
 
 test('every preset produces a valid colour', () => {
+  const creative = ['Oil-slick petrol', 'Copper comet', 'Ultraviolet static', 'Arctic tide', 'Solar flare', 'Ghost orchid'];
+  for (const name of creative) assert.ok(PRESETS.some((p) => p.n === name), `missing starting point: ${name}`);
   for (const p of PRESETS) for (const v of finalColour(p).rgb) assert.ok(v >= 0 && v <= 1 && Number.isFinite(v), p.n);
 });
