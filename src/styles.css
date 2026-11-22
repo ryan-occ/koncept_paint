@@ -1,0 +1,79 @@
+/* VOICE: workshop tool, confident and practical, a painter's mixing bench
+   IDEA: a spray booth with a mixing scale beside it: car in the light, recipe card on the bench
+   PICTURE: the live 3D car (or test panel) under booth lighting, large, first thing on screen
+   COLOUR and TYPE: graphite booth and white LED, masking-tape yellow accent; Barlow Condensed like tin labels + Inter
+   LAYOUT: viewer + recipe left, mixing bench panel right; stacks viewer, bench, recipe under 900px */
+:root{color-scheme:light dark;--bg:light-dark(#f3f4f5,#111316);--ink:light-dark(#15171a,#eceef0);--mute:light-dark(#5b6168,#9aa1a9);--panel:light-dark(#fff,#1a1d21);--line:light-dark(#d8dbdf,#2b2f35);--chip:light-dark(#eef0f2,#23272c);--tape:#f2b705;--tapeInk:#1a1400}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:"Barlow Condensed",Inter,sans-serif;font-weight:700;line-height:1.05;margin:0}
+h1{font-size:clamp(32px,4vw,44px);text-wrap:balance}
+h2{font-size:22px}
+h3{font-size:18px;display:flex;align-items:center;gap:8px}
+h3 b{background:var(--tape);color:var(--tapeInk);border-radius:4px;padding:0 7px;font-size:15px}
+header{padding:20px max(3vw,16px) 14px;display:flex;flex-wrap:wrap;gap:6px 24px;align-items:baseline}
+header p{margin:0;color:var(--mute);max-width:62ch}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 400px;grid-template-areas:"view bench" "recipe bench" "cal cal";gap:16px;padding:0 max(3vw,16px) 32px;align-items:start}
+.view{grid-area:view;position:relative;height:min(68vh,640px);min-height:380px;border-radius:14px;overflow:hidden;background:#c9ccd0;touch-action:none}
+.view canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+.view canvas:active{cursor:grabbing}
+.bar{position:absolute;left:12px;right:12px;display:flex;flex-wrap:wrap;gap:8px;pointer-events:none}
+.bar.top{top:12px}.bar.bot{bottom:12px;justify-content:space-between;align-items:end}
+.bar>*{pointer-events:auto}
+.seg{display:inline-flex;flex-wrap:wrap;background:rgba(18,20,23,.72);backdrop-filter:blur(8px);border-radius:10px;padding:3px;gap:2px}
+.seg button{all:unset;cursor:pointer;color:#e8eaec;font:500 13px Inter,sans-serif;padding:8px 11px;border-radius:8px;min-height:20px}
+.seg button[aria-pressed=true]{background:var(--tape);color:var(--tapeInk)}
+.seg button:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--tape);outline-offset:2px}
+.swatch{display:flex;gap:10px;align-items:center;background:rgba(18,20,23,.72);backdrop-filter:blur(8px);color:#eceef0;border-radius:10px;padding:6px 12px 6px 6px;font-size:13px}
+.swatch i{width:34px;height:34px;border-radius:7px;border:1px solid rgba(255,255,255,.25)}
+.note{grid-area:view;align-self:end;margin:0}
+.caveat{font-size:13px;color:var(--mute);margin:8px 2px 0}
+.bench{grid-area:bench;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 18px 18px}
+.bench section{padding:14px 0;border-bottom:1px solid var(--line)}
+.bench section:last-child{border:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{all:unset;cursor:pointer;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:13px;min-height:20px;display:inline-flex;gap:6px;align-items:center}
+.chip:hover{border-color:var(--tape)}
+.chip .x{opacity:.6;padding-left:4px}
+.row{display:grid;grid-template-columns:22px minmax(0,1fr) 112px 46px;gap:8px;align-items:center;padding:4px 0}
+.row i{width:22px;height:22px;border-radius:5px;border:1px solid var(--line)}
+.row span{font-size:14px}
+.row em{font-style:normal;font-size:12px;color:var(--mute);text-align:right;font-variant-numeric:tabular-nums}
+.num{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.num button{all:unset;cursor:pointer;width:32px;text-align:center;background:var(--chip);font-weight:600;line-height:36px}
+.num input{width:100%;border:0;background:transparent;color:inherit;text-align:center;font:16px Inter,sans-serif;padding:0;min-height:36px;-moz-appearance:textfield}
+.num input::-webkit-inner-spin-button{display:none}
+label.f{display:grid;grid-template-columns:120px minmax(0,1fr) 52px;gap:10px;align-items:center;margin-top:10px;font-size:14px}
+label.f output{text-align:right;font-variant-numeric:tabular-nums;color:var(--mute);font-size:13px}
+input[type=range]{width:100%;accent-color:var(--tape);height:28px}
+select{width:100%;font:16px Inter,sans-serif;padding:7px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:inherit}
+input[type=color]{width:100%;height:36px;border:1px solid var(--line);border-radius:8px;background:none;padding:2px}
+.lbl{font-size:13px;color:var(--mute);margin:12px 0 6px}
+.seg.light{background:var(--chip);border:1px solid var(--line)}
+.seg.light button{color:var(--ink)}
+.cover{font-size:13px;margin-top:8px;color:var(--mute)}
+.cover.warn{color:light-dark(#9a5b00,#f2b705)}
+.recipe{grid-area:recipe;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.rhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.btn{all:unset;cursor:pointer;background:var(--tape);color:var(--tapeInk);font-weight:600;font-size:14px;padding:10px 16px;border-radius:9px;min-height:20px}
+.btn.ghost{background:var(--chip);color:var(--ink);border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--mute);font-size:13px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.layers{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px}
+.layer{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px}
+.layer b{display:block;font-size:14px;margin-bottom:2px}
+.cal{grid-area:cal}.calgrid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;margin-top:12px}
+.photo canvas{width:100%;height:auto;display:block;border-radius:10px;cursor:crosshair;margin-top:10px}
+.chip[aria-pressed=true]{border-color:var(--tape);background:color-mix(in srgb,var(--tape) 22%,transparent)}
+.chip i{width:12px;height:12px;border-radius:3px;border:1px solid var(--line)}
+.sw2{display:inline-block;width:22px;height:22px;border-radius:5px;vertical-align:middle;border:1px solid var(--line);margin-right:6px}
+.guide{margin:12px 0 0;padding-left:22px}.guide li{margin:0 0 12px;max-width:75ch}.guide b{display:block}
+.save{display:flex;gap:8px;margin-top:10px}
+.save input{flex:1;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:16px Inter,sans-serif;padding:8px 10px}
+.fail{position:absolute;inset:0;display:none;place-items:center;padding:24px;text-align:center;color:#15171a}
+@media(max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);grid-template-areas:"view" "bench" "recipe" "cal"}.calgrid{grid-template-columns:minmax(0,1fr)}.view{height:58vh}}
+@media(max-width:600px){table{font-size:13px}.row{grid-template-columns:22px minmax(0,1fr) 104px 40px}label.f{grid-template-columns:96px minmax(0,1fr) 46px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}

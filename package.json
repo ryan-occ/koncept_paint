@@ -1,0 +1,25 @@
+{
+  "name": "koncept-paint",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Paint booth simulator: mix toners, build a paint system coat by coat, preview it in 3D and calibrate against real test cards.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
