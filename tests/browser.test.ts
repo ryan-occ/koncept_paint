@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright';
 import { createServer, type ViteDevServer } from 'vite';
@@ -106,13 +106,57 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(saved[0].n, 'Browser saved teal');
     assert.equal(saved[0].fl, 65);
 
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Export saved mixes' }).click(),
+    ]);
+    const downloadPath = await download.path();
+    assert.ok(downloadPath);
+    const backup = JSON.parse(await readFile(downloadPath, 'utf8'));
+    assert.equal(backup.format, 'koncept-paint-mixes');
+    assert.equal(backup.version, 1);
+    assert.equal(backup.mixes[0].n, 'Browser saved teal');
+
+    const invalidBackup = { ...backup, mixes: [{ ...backup.mixes[0], fl: -1 }] };
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.getByRole('button', { name: 'Import backup' }).click(),
+    ]);
+    await chooser.setFiles({
+      name: 'invalid-mixes.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(invalidBackup)),
+    });
+    await page.waitForFunction(() => document.querySelector('#mixBackupMsg')?.textContent?.includes('invalid mix'));
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('pbs-mixes') || '[]')), saved);
+
+    const validBackup = {
+      ...backup,
+      mixes: [
+        { ...backup.mixes[0], fl: 72 },
+        { ...backup.mixes[0], n: 'Imported teal copy' },
+      ],
+    };
+    await page.locator('#mixImportFile').setInputFiles({
+      name: 'paint-mixes.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(validBackup)),
+    });
+    await page.waitForFunction(() => document.querySelector('#mixBackupMsg')?.textContent?.includes('Imported 2 mixes'));
+    const imported = await page.evaluate(() => JSON.parse(localStorage.getItem('pbs-mixes') || '[]'));
+    assert.equal(imported.length, 2);
+    assert.equal(imported.find((mix: { n: string }) => mix.n === 'Browser saved teal').fl, 72);
+
     await page.reload();
     const savedButton = page.getByRole('button', { name: /Browser saved teal/ });
     await savedButton.waitFor();
     await savedButton.click();
     assert.equal(await page.locator('#rTitle').textContent(), 'Browser saved teal');
-    assert.equal(await page.locator('#o_fl').textContent(), '65%');
+    assert.equal(await page.locator('#o_fl').textContent(), '72%');
     assert.match(await page.locator('#rBody').innerText(), /Phthalo green/);
+    await page.getByRole('button', { name: /Imported teal copy/ }).click();
+    assert.equal(await page.locator('#rTitle').textContent(), 'Imported teal copy');
+    assert.equal(await page.locator('#o_fl').textContent(), '65%');
   });
 
   it('restores calibration data from the backup panel and persists it', async () => {

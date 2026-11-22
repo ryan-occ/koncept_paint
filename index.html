@@ -38,6 +38,12 @@
       <div class="lbl">Your saved mixes</div>
       <div class="chips" id="saved"></div>
       <div class="save"><input id="mixName" value="Untitled mix" aria-label="Mix name"><button class="btn ghost" id="saveBtn" type="button">Save mix</button></div>
+      <div class="backup-actions">
+        <button class="btn ghost" id="exportMixesBtn" type="button">Export saved mixes</button>
+        <button class="btn ghost" id="importMixesBtn" type="button">Import backup</button>
+        <input id="mixImportFile" type="file" accept=".json,application/json" hidden>
+      </div>
+      <p class="caveat" id="mixBackupMsg" role="status" aria-live="polite"></p>
     </section>
     <section>
       <h3><b>1</b>Ground coat</h3>

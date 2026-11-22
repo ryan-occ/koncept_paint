@@ -73,6 +73,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .guide{margin:12px 0 0;padding-left:22px}.guide li{margin:0 0 12px;max-width:75ch}.guide b{display:block}
 .save{display:flex;gap:8px;margin-top:10px}
 .save input{flex:1;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:16px Inter,sans-serif;padding:8px 10px}
+.backup-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .fail{position:absolute;inset:0;display:none;place-items:center;padding:24px;text-align:center;color:#15171a}
 @media(max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);grid-template-areas:"view" "bench" "recipe" "cal"}.calgrid{grid-template-columns:minmax(0,1fr)}.view{height:58vh}}
 @media(max-width:600px){table{font-size:13px}.row{grid-template-columns:22px minmax(0,1fr) 104px 40px}label.f{grid-template-columns:96px minmax(0,1fr) 46px}}

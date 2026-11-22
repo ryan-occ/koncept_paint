@@ -21,6 +21,10 @@ If Chromium is not already installed, install the browser used by the regression
 The build uses relative paths, so `dist/` can be hosted anywhere (GitHub Pages, Netlify, a
 shop PC).
 
+Saved mixes stay in the current browser unless you export them. Use **Export saved mixes** and
+**Import backup** on the mixing bench to move recipes between browsers; an invalid backup leaves
+the existing saved mixes unchanged.
+
 ## Project layout
 
 ```

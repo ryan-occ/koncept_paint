@@ -7,6 +7,7 @@ import { applicationGuide, layers, recipeText } from '../guide.ts';
 import { LIGHTS } from '../render/lighting-presets.ts';
 import type { Booth } from '../render/booth.ts';
 import type { Mix } from '../types.ts';
+import { mergeMixes, parseMixBackup, serializeMixBackup } from './mix-backup.ts';
 import { $, cal, changed, esc, loadMix, mix, onChange, storage, view } from './store.ts';
 
 type Opt = [value: string, label: string];
@@ -158,6 +159,36 @@ export function initBench(b: Booth | null) {
     storage.set(SAVE_KEY, saved);
     drawSaved();
   };
+
+  $('exportMixesBtn').onclick = () => {
+    const blob = new Blob([serializeMixBackup(saved)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `koncept-paint-mixes-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    $('mixBackupMsg').textContent = `Exported ${saved.length} saved mix${saved.length === 1 ? '' : 'es'}.`;
+  };
+  $('importMixesBtn').onclick = () => $<HTMLInputElement>('mixImportFile').click();
+  $<HTMLInputElement>('mixImportFile').addEventListener('change', async (event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      if (file.size > 5_000_000) throw new Error('Backup files must be smaller than 5 MB.');
+      const imported = parseMixBackup(await file.text());
+      saved = mergeMixes(saved, imported);
+      storage.set(SAVE_KEY, saved);
+      drawSaved();
+      $('mixBackupMsg').textContent = `Imported ${imported.length} mix${imported.length === 1 ? '' : 'es'}. Matching names were updated.`;
+    } catch (error) {
+      $('mixBackupMsg').textContent = error instanceof Error ? error.message : 'Could not read this backup.';
+    } finally {
+      input.value = '';
+    }
+  });
 
   drawSaved();
   load(PRESETS[0]);
