@@ -4,7 +4,7 @@ import { PRESETS } from '../data/presets.ts';
 import { finalColour, tonerHex } from '../color/mixing.ts';
 import { linearToHex } from '../color/space.ts';
 import { applicationGuide, layers, recipeText } from '../guide.ts';
-import { LIGHTS } from '../render/lighting.ts';
+import { LIGHTS } from '../render/lighting-presets.ts';
 import type { Booth } from '../render/booth.ts';
 import type { Mix } from '../types.ts';
 import { $, cal, changed, esc, loadMix, mix, onChange, storage, view } from './store.ts';
@@ -161,4 +161,10 @@ export function initBench(b: Booth | null) {
 
   drawSaved();
   load(PRESETS[0]);
+}
+
+export function attachBooth(b: Booth) {
+  booth = b;
+  booth.autoRotate = view.spin === 'on';
+  update();
 }

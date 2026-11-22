@@ -1,18 +1,25 @@
 import './styles.css';
-import { Booth } from './render/booth.ts';
-import { initBench } from './ui/bench.ts';
+import { initBench, attachBooth } from './ui/bench.ts';
 import { initCalibration } from './ui/calibrate.ts';
 import { $, view } from './ui/store.ts';
 
-let booth: Booth | null = null;
-try {
-  booth = new Booth($<HTMLCanvasElement>('cv'), $('view'));
-  booth.setLight(view.light);
-  booth.setShape(view.shape);
-} catch (err) {
-  console.error(err);
-  $('fail').style.display = 'grid';
+initBench(null);
+initCalibration();
+
+function startBooth() {
+  void import('./render/booth.ts').then(({ Booth }) => {
+    const booth = new Booth($<HTMLCanvasElement>('cv'), $('view'));
+    booth.setLight(view.light);
+    booth.setShape(view.shape);
+    attachBooth(booth);
+  }).catch((err) => {
+    console.error(err);
+    $('fail').style.display = 'grid';
+  });
 }
 
-initBench(booth);
-initCalibration();
+if ('requestIdleCallback' in window) {
+  window.requestIdleCallback(startBooth, { timeout: 1500 });
+} else {
+  setTimeout(startBooth);
+}

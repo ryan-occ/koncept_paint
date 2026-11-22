@@ -3,7 +3,7 @@ import { PEARLS, TONERS } from '../data/toners.ts';
 import { POWDERS } from '../data/powders.ts';
 import type { BoothTemp, Calibration, Mix } from '../types.ts';
 import type { ShapeId } from '../render/booth.ts';
-import type { LightId } from '../render/lighting.ts';
+import type { LightId } from '../render/lighting-presets.ts';
 
 export const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
