@@ -162,16 +162,45 @@ describe('paint booth browser flows', { concurrency: false }, () => {
   it('opens the print flow with the generated sheet visible in print media', async () => {
     await page.evaluate(() => {
       window.print = () => {
-        document.documentElement.dataset.printRequested = 'true';
+        const root = document.documentElement;
+        root.dataset.printCount = String(Number(root.dataset.printCount || 0) + 1);
       };
     });
     await page.getByRole('button', { name: 'Print mixing sheet' }).click();
 
-    assert.equal(await page.locator('html').getAttribute('data-print-requested'), 'true');
+    assert.equal(await page.locator('html').getAttribute('data-print-count'), '1');
+    assert.deepEqual(
+      await page.locator('#printSheet .ps-job td:nth-child(2), #printSheet .ps-job td:nth-child(4)').allTextContents(),
+      ['', '', '', ''],
+    );
+    await page.emulateMedia({ media: 'print' });
+    assert.equal(await page.locator('#printSheet').evaluate((el) => getComputedStyle(el).display), 'block');
+    assert.equal(await page.locator('.wrap').evaluate((el) => getComputedStyle(el).display), 'none');
+    await page.emulateMedia({ media: 'screen' });
+
+    await page.locator('.sheet-details summary').click();
+    await page.getByLabel('Job number').fill('JOB-204');
+    await page.getByLabel('Vehicle / panels').fill('Van & trailer');
+    await page.getByLabel('Paint system').fill('Brand <A> "Series"');
+    await page.getByLabel('Technician / mixed by').fill('<img src=x onerror=alert(1)>');
+    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+
+    assert.equal(await page.locator('html').getAttribute('data-print-count'), '2');
+    const fields = await page.locator('#printSheet .ps-job tr').evaluateAll((rows) =>
+      rows.map((row) => [...row.querySelectorAll('td:nth-child(2), td:nth-child(4)')].map((cell) => cell.textContent)),
+    );
+    assert.deepEqual(fields, [
+      ['JOB-204', 'Van & trailer'],
+      ['Brand <A> "Series"', '<img src=x onerror=alert(1)>'],
+    ]);
+    assert.equal(await page.locator('#printSheet img').count(), 0);
+
     const sheetText = await page.locator('#printSheet').innerText();
     for (const stage of ['Ground coat / primer', 'Base coat', 'Candy coat', 'Clear coat']) {
       assert.ok(sheetText.includes(stage), `print sheet should include ${stage}`);
     }
+    assert.match(sheetText, /JOB-204/);
+    assert.match(sheetText, /Brand <A> "Series"/);
 
     await page.emulateMedia({ media: 'print' });
     assert.equal(await page.locator('#printSheet').evaluate((el) => getComputedStyle(el).display), 'block');

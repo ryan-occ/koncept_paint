@@ -99,6 +99,15 @@
         <button class="btn ghost" id="printBtn" type="button">Print mixing sheet</button>
       </div>
     </div>
+    <details class="sheet-details">
+      <summary>Job details for printout (optional)</summary>
+      <div class="sheet-fields">
+        <label for="sheetJobNumber">Job number<input id="sheetJobNumber" type="text" maxlength="120"></label>
+        <label for="sheetVehicle">Vehicle / panels<input id="sheetVehicle" type="text" maxlength="120"></label>
+        <label for="sheetPaintSystem">Paint system<input id="sheetPaintSystem" type="text" maxlength="120"></label>
+        <label for="sheetTechnician">Technician / mixed by<input id="sheetTechnician" type="text" maxlength="120"></label>
+      </div>
+    </details>
     <table><thead><tr><th>Toner</th><th class="n">Parts</th><th class="n">Share</th><th class="n">Weight</th></tr></thead><tbody id="rBody"></tbody></table>
     <div class="layers" id="layers"></div>
     <h2 style="margin-top:22px">Application guide</h2>

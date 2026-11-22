@@ -26,10 +26,18 @@ export interface Sheet {
   finalHex: string;
   calibration: string;
   batch: number;
+  details: Required<SheetDetails>;
   formula: FormulaRow[];
   stages: Stage[];
   guide: Step[];
   general: string[];
+}
+
+export interface SheetDetails {
+  jobNumber?: string;
+  vehiclePanels?: string;
+  paintSystem?: string;
+  technician?: string;
 }
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -47,7 +55,14 @@ export function formula(mix: Mix, cal: Calibration, batch: number): FormulaRow[]
   });
 }
 
-export function buildSheet(mix: Mix, cal: Calibration, temp: BoothTemp, batch: number, date = new Date()): Sheet {
+export function buildSheet(
+  mix: Mix,
+  cal: Calibration,
+  temp: BoothTemp,
+  batch: number,
+  date = new Date(),
+  details: SheetDetails = {},
+): Sheet {
   const full = finalColour(mix, cal);
   const noMid: Mix = { ...mix, mic: 0, m1: 'none', m2: 'none', cc: 0 };
   const afterBase = finalColour(noMid, cal);
@@ -153,6 +168,12 @@ export function buildSheet(mix: Mix, cal: Calibration, temp: BoothTemp, batch: n
     finalHex: hex(full.rgb),
     calibration: used.length && nk === used.length ? 'Toner colours calibrated from test cards' : nk ? `${nk} of ${used.length} toners calibrated` : 'Generic toner colours (not calibrated)',
     batch,
+    details: {
+      jobNumber: details.jobNumber?.trim() || '',
+      vehiclePanels: details.vehiclePanels?.trim() || '',
+      paintSystem: details.paintSystem?.trim() || '',
+      technician: details.technician?.trim() || '',
+    },
     formula: formula(mix, cal, batch),
     stages,
     guide: applicationGuide(mix, full.cov, full.m, temp),
@@ -174,7 +195,7 @@ export function renderSheet(s: Sheet): string {
     <div><h1>Paint mixing sheet</h1><p class="ps-name">${esc(s.name)}</p></div>
     <div class="ps-final">${patch(s.finalHex, 'ps-big')}<div><b>${s.finalHex.toUpperCase()}</b><br>${esc(s.calibration)}<br>Printed ${s.date}</div></div>
   </header>
-  <table class="ps-job"><tr><td>Job no.</td><td></td><td>Vehicle / panels</td><td></td></tr><tr><td>Paint system</td><td></td><td>Mixed by / date</td><td></td></tr></table>
+  <table class="ps-job"><tr><td>Job no.</td><td>${esc(s.details.jobNumber)}</td><td>Vehicle / panels</td><td>${esc(s.details.vehiclePanels)}</td></tr><tr><td>Paint system</td><td>${esc(s.details.paintSystem)}</td><td>Technician / mixed by</td><td>${esc(s.details.technician)}</td></tr></table>
 
   <h2>Layer build-up</h2>
   <div class="ps-strip">${s.stages.map((st) => `<div>${patch(st.patch)}<span>${esc(st.patchLabel)}</span></div>`).join('<i>→</i>')}</div>

@@ -146,7 +146,13 @@ export function initBench(b: Booth | null) {
 
   $('printBtn').addEventListener('click', () => {
     const batch = Math.max(0, +$<HTMLInputElement>('batch').value || 0) || 1000;
-    $('printSheet').innerHTML = renderSheet(buildSheet(mix, cal, view.temp, batch));
+    const details = {
+      jobNumber: $<HTMLInputElement>('sheetJobNumber').value,
+      vehiclePanels: $<HTMLInputElement>('sheetVehicle').value,
+      paintSystem: $<HTMLInputElement>('sheetPaintSystem').value,
+      technician: $<HTMLInputElement>('sheetTechnician').value,
+    };
+    $('printSheet').innerHTML = renderSheet(buildSheet(mix, cal, view.temp, batch, new Date(), details));
     try { window.print(); } catch { $('printBtn').textContent = 'Printing blocked here: open the app in its own tab'; }
   });
 
