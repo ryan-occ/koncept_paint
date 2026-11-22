@@ -2,8 +2,8 @@ import { TONERS } from '../data/toners.ts';
 import { finalColour, tonerHex } from '../color/mixing.ts';
 import { fitCorrection, REF_PATCHES, tintStrength, verdict, type Correction } from '../color/calibration.ts';
 import { linearToHex, srgbToLinear, toLab, deltaE } from '../color/space.ts';
-import type { Calibration, RGB } from '../types.ts';
-import { $, cal, changed, esc, mix, saveCal } from './store.ts';
+import type { RGB } from '../types.ts';
+import { $, cal, changed, esc, mix, parseCalibrationBackup, saveCal } from './store.ts';
 import { syncUI } from './bench.ts';
 
 const PICKS: [string, string][] = [...REF_PATCHES.map(([k, l]) => [k, l] as [string, string]), ['paint', 'Paint sample']];
@@ -144,14 +144,14 @@ export function initCalibration() {
   };
   $('calLoad').onclick = () => {
     try {
-      const d = JSON.parse($<HTMLTextAreaElement>('calJson').value) as Calibration;
-      if (!d || typeof d.t !== 'object' || !Array.isArray(d.checks)) throw new Error('invalid');
+      const d = parseCalibrationBackup(JSON.parse($<HTMLTextAreaElement>('calJson').value) as unknown);
+      if (!d) throw new Error('invalid calibration backup');
       cal.t = d.t;
       cal.checks = d.checks;
       refresh();
       $('calMsg').textContent = 'Calibration restored.';
     } catch {
-      $('calMsg').textContent = 'That text is not a valid calibration backup.';
+      $('calMsg').textContent = 'Invalid calibration backup. Existing calibration was kept.';
     }
   };
 

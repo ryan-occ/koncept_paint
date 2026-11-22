@@ -162,7 +162,7 @@ describe('paint booth browser flows', { concurrency: false }, () => {
   it('restores calibration data from the backup panel and persists it', async () => {
     await page.getByText('Back up or restore calibration').click();
     const calibration = {
-      t: { red: { hex: '#123456', str: 1.4 } },
+      t: { red: { hex: '#123456', str: [1.4, 1.4, 1.4] } },
       checks: [{ n: 'Browser calibration', p: '#000000', m: '#111111', de: 5.1 }],
     };
     await page.locator('#calJson').fill(JSON.stringify(calibration));
@@ -181,5 +181,18 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     const restored = JSON.parse(await page.locator('#calJson').inputValue());
     assert.deepEqual(restored, calibration);
     assert.match(await page.locator('#checks').innerText(), /Browser calibration/);
+
+    await page.locator('#calJson').fill(JSON.stringify({
+      t: { red: { hex: 'not-a-colour' } },
+      checks: [{ n: 'Broken check', p: '#000000', m: '#111111', de: 1 }],
+    }));
+    await page.getByRole('button', { name: 'Restore from text' }).click();
+    assert.equal(await page.locator('#calMsg').textContent(), 'Invalid calibration backup. Existing calibration was kept.');
+    assert.match(await page.locator('#checks').innerText(), /Browser calibration/);
+    assert.doesNotMatch(await page.locator('#checks').innerText(), /Broken check/);
+    assert.deepEqual(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('pbs-cal') || '{}')),
+      calibration,
+    );
   });
 });
