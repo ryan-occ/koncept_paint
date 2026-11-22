@@ -11,11 +11,12 @@ your own materials.
 ```bash
 npm install
 npm run dev        # local dev server
-npm test           # unit + browser regression tests (Node 22.6+ and Chromium)
+npm test           # 20 colour, mixing, calibration, and print-sheet tests
+npm run test:replit # browser, saved-mix, and calibration-backup regression tests
 npm run build      # type-check + production build into dist/
 ```
 
-If Chromium is not already installed, install the browser used by the regression tests with
+If Chromium is not already installed, install the browser used by the extended regression tests with
 `npx playwright install chromium`.
 
 The build uses relative paths, so `dist/` can be hosted anywhere (GitHub Pages, Netlify, a

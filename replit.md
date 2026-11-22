@@ -12,7 +12,8 @@ The imported app uses TypeScript, Vite, and Three.js. Keep its existing structur
 
 ## Checks
 
-- `npm test` runs the colour, mixing, and calibration tests.
+- `npm test` runs the 20 colour, calibration, mixing, and print-sheet unit tests.
+- `npm run test:replit` runs browser, saved-mix, and calibration-backup tests; it requires Chromium.
 - `npm run build` type-checks the project and builds the static site into `dist/`.
 - `npm run typecheck` runs the TypeScript check alone.
 

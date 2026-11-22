@@ -4,6 +4,7 @@ import { PRESETS } from '../data/presets.ts';
 import { finalColour, tonerHex } from '../color/mixing.ts';
 import { linearToHex } from '../color/space.ts';
 import { applicationGuide, layers, recipeText } from '../guide.ts';
+import { buildSheet, renderSheet } from '../sheet.ts';
 import { LIGHTS } from '../render/lighting-presets.ts';
 import type { Booth } from '../render/booth.ts';
 import type { Mix } from '../types.ts';
@@ -141,6 +142,12 @@ export function initBench(b: Booth | null) {
     const b = $('copyBtn');
     try { await navigator.clipboard.writeText(copyText); b.textContent = 'Copied'; } catch { b.textContent = 'Copy blocked'; }
     setTimeout(() => (b.textContent = 'Copy recipe'), 1600);
+  });
+
+  $('printBtn').addEventListener('click', () => {
+    const batch = Math.max(0, +$<HTMLInputElement>('batch').value || 0) || 1000;
+    $('printSheet').innerHTML = renderSheet(buildSheet(mix, cal, view.temp, batch));
+    try { window.print(); } catch { $('printBtn').textContent = 'Printing blocked here: open the app in its own tab'; }
   });
 
   $('presets').innerHTML = PRESETS.map((p, i) => `<button class="chip" type="button" data-i="${i}">${p.n}</button>`).join('');

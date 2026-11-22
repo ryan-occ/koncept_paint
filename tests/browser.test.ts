@@ -159,6 +159,25 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('#o_fl').textContent(), '65%');
   });
 
+  it('opens the print flow with the generated sheet visible in print media', async () => {
+    await page.evaluate(() => {
+      window.print = () => {
+        document.documentElement.dataset.printRequested = 'true';
+      };
+    });
+    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+
+    assert.equal(await page.locator('html').getAttribute('data-print-requested'), 'true');
+    const sheetText = await page.locator('#printSheet').innerText();
+    for (const stage of ['Ground coat / primer', 'Base coat', 'Candy coat', 'Clear coat']) {
+      assert.ok(sheetText.includes(stage), `print sheet should include ${stage}`);
+    }
+
+    await page.emulateMedia({ media: 'print' });
+    assert.equal(await page.locator('#printSheet').evaluate((el) => getComputedStyle(el).display), 'block');
+    assert.equal(await page.locator('.wrap').evaluate((el) => getComputedStyle(el).display), 'none');
+  });
+
   it('restores calibration data from the backup panel and persists it', async () => {
     await page.getByText('Back up or restore calibration').click();
     const calibration = {
