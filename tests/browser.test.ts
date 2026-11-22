@@ -159,16 +159,19 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('#o_fl').textContent(), '65%');
   });
 
-  it('opens the print flow with the generated sheet visible in print media', async () => {
+  it('prints the same mixing sheet on A4 or Letter paper', async () => {
     await page.evaluate(() => {
       window.print = () => {
         const root = document.documentElement;
         root.dataset.printCount = String(Number(root.dataset.printCount || 0) + 1);
       };
     });
-    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    const paperSize = page.getByRole('combobox', { name: 'Page size' });
+    assert.equal(await paperSize.inputValue(), 'A4');
 
+    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
     assert.equal(await page.locator('html').getAttribute('data-print-count'), '1');
+    assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*A4 portrait/);
     assert.deepEqual(
       await page.locator('#printSheet .ps-job td:nth-child(2), #printSheet .ps-job td:nth-child(4)').allTextContents(),
       ['', '', '', ''],
@@ -202,6 +205,12 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.match(sheetText, /JOB-204/);
     assert.match(sheetText, /Brand <A> "Series"/);
 
+    await page.emulateMedia({ media: 'screen' });
+    await paperSize.selectOption('Letter');
+    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    assert.equal(await page.locator('html').getAttribute('data-print-count'), '3');
+    assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*Letter portrait/);
+    assert.equal(await page.locator('#printSheet').innerText(), sheetText, 'paper size should not change sheet content');
     await page.emulateMedia({ media: 'print' });
     assert.equal(await page.locator('#printSheet').evaluate((el) => getComputedStyle(el).display), 'block');
     assert.equal(await page.locator('.wrap').evaluate((el) => getComputedStyle(el).display), 'none');

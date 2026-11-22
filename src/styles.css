@@ -63,6 +63,8 @@ input[type=color]{width:100%;height:36px;border:1px solid var(--line);border-rad
 .sheet-fields input{width:100%;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:14px Inter,sans-serif;padding:7px 9px}
 .btn{all:unset;cursor:pointer;background:var(--tape);color:var(--tapeInk);font-weight:600;font-size:14px;padding:10px 16px;border-radius:9px;min-height:20px}
 .btn.ghost{background:var(--chip);color:var(--ink);border:1px solid var(--line)}
+.page-size{display:flex;align-items:center;gap:6px;color:var(--mute);font-size:13px}
+.page-size select{font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);padding:7px 8px;min-height:38px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-weight:600;color:var(--mute);font-size:13px}
@@ -86,7 +88,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* ---------- printable mixing sheet ---------- */
 #printSheet{display:none}
-@page{size:A4;margin:12mm}
+@page{size:A4 portrait;margin:12mm}
 @media print{
   body{background:#fff;color:#111;font-size:10.5pt}
   body>*:not(#printSheet){display:none!important}

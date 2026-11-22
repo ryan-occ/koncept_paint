@@ -153,6 +153,14 @@ export function initBench(b: Booth | null) {
       technician: $<HTMLInputElement>('sheetTechnician').value,
     };
     $('printSheet').innerHTML = renderSheet(buildSheet(mix, cal, view.temp, batch, new Date(), details));
+    const pageSize = $<HTMLSelectElement>('printPageSize').value;
+    let pageStyle = document.getElementById('printPageStyle') as HTMLStyleElement | null;
+    if (!pageStyle) {
+      pageStyle = document.createElement('style');
+      pageStyle.id = 'printPageStyle';
+      document.head.append(pageStyle);
+    }
+    pageStyle.textContent = `@page { size: ${pageSize} portrait; margin: 12mm; }`;
     try { window.print(); } catch { $('printBtn').textContent = 'Printing blocked here: open the app in its own tab'; }
   });
 
