@@ -2,7 +2,7 @@ import { TONERS } from '../data/toners.ts';
 import { POWDERS } from '../data/powders.ts';
 import { DEFAULT_MIX } from '../data/presets.ts';
 import type { Calibration, GroundId, Mix, RGB } from '../types.ts';
-import { finalColour, EMPTY_CAL } from './mixing.ts';
+import { colourAtViewAngle, finalColour, EMPTY_CAL, type ViewAngle } from './mixing.ts';
 import { deltaE, hexToLinear, linearToHex, toLab } from './space.ts';
 
 /**
@@ -20,6 +20,21 @@ export interface MatchResult {
   target: string;
   /** true when the target is outside what these toners can reach */
   outOfGamut: boolean;
+  angleAnalysis?: AngleMatchAnalysis;
+}
+
+export interface AngleObservation {
+  label: string;
+  angle: ViewAngle;
+  hex: string;
+}
+
+export interface AngleMatchAnalysis {
+  views: { label: string; angle: ViewAngle; target: string; predicted: string; de: number }[];
+  meanDe: number;
+  observedShift: number;
+  predictedShift: number;
+  effectFit: 'stable' | 'explains' | 'partial' | 'unexplained';
 }
 
 const HUES: [string, number][] = [['red', 25], ['orange', 55], ['gold', 80], ['green', 150], ['turq', 200], ['blue', 265], ['violet', 300], ['magenta', 345]];
@@ -66,9 +81,20 @@ const err = (mix: Mix, target: RGB, cal: Calibration) => {
   return deltaE(f.rgb, target) + (f.cov < 0.95 ? (0.95 - f.cov) * 200 : 0);
 };
 
+function angleError(mix: Mix, views: readonly AngleObservation[], cal: Calibration) {
+  const coverage = finalColour(mix, cal).cov;
+  const coveragePenalty = coverage < 0.95 ? (0.95 - coverage) * 200 : 0;
+  return views.reduce((sum, view) =>
+    sum + deltaE(colourAtViewAngle(mix, view.angle, cal), hexToLinear(view.hex)) + coveragePenalty,
+  0) / views.length;
+}
+
 /** Coordinate descent on log-weights for a fixed toner set. */
-function optimise(ids: string[], layers: Mix, target: RGB, cal: Calibration): [number[], number] {
-  const evalW = (ww: number[]) => err({ ...layers, t: Object.fromEntries(ids.map((id, i) => [id, ww[i]])) }, target, cal);
+function optimise(ids: string[], layers: Mix, target: RGB, cal: Calibration, views?: readonly AngleObservation[]): [number[], number] {
+  const evalW = (ww: number[]) => {
+    const candidate = { ...layers, t: Object.fromEntries(ids.map((id, i) => [id, ww[i]])) };
+    return views?.length ? angleError(candidate, views, cal) : err(candidate, target, cal);
+  };
   // Start from equal parts, or from each toner dominant, whichever is closest.
   const starts = [ids.map(() => 1), ...(ids.length > 1 ? ids.map((_, j) => ids.map((__, i) => (i === j ? 20 : 1))) : [])];
   let w = starts[0], best = evalW(w);
@@ -133,14 +159,89 @@ export function matchColour(targetHex: string, finish: Finish, name: string, cal
   return result!;
 }
 
-function solveToners(layers: Mix, target: RGB, targetHex: string, cal: Calibration): MatchResult {
+/** Solve a formula against each separately sampled view using the approximate effect-angle model. */
+export function matchColourAcrossAngles(
+  targetHex: string,
+  finish: Finish,
+  name: string,
+  views: readonly AngleObservation[],
+  cal: Calibration = EMPTY_CAL,
+): MatchResult {
+  if (!views.length) throw new RangeError('At least one angle sample is required.');
+  let base: MatchResult;
+  if (finish === 'candy') {
+    base = matchColour(targetHex, finish, name, cal);
+  } else {
+    const target = hexToLinear(targetHex);
+    const layers = { ...DEFAULT_MIX, ...layersFor(finish, target), n: name, t: {} } as Mix;
+    let best: MatchResult | null = null;
+    for (const bc of [2, 3, 4]) {
+      const candidate = solveToners({ ...layers, bc }, target, targetHex, cal, views);
+      if (!best || candidate.de < best.de - 0.3) best = candidate;
+      if (candidate.de < 2 && finalColour(candidate.mix, cal).cov >= 0.95) break;
+    }
+    base = best!;
+  }
+  return withAngleAnalysis(base, views, cal);
+}
+
+function maxPairwiseShift(hexes: readonly string[]) {
+  let max = 0;
+  for (let i = 0; i < hexes.length; i++) {
+    for (let j = i + 1; j < hexes.length; j++) {
+      max = Math.max(max, deltaE(hexToLinear(hexes[i]), hexToLinear(hexes[j])));
+    }
+  }
+  return max;
+}
+
+function withAngleAnalysis(result: MatchResult, views: readonly AngleObservation[], cal: Calibration): MatchResult {
+  const scoredViews = views.map((view) => {
+    const predicted = linearToHex(colourAtViewAngle(result.mix, view.angle, cal));
+    return {
+      label: view.label,
+      angle: view.angle,
+      target: view.hex,
+      predicted,
+      de: deltaE(hexToLinear(predicted), hexToLinear(view.hex)),
+    };
+  });
+  const meanDe = scoredViews.reduce((sum, view) => sum + view.de, 0) / scoredViews.length;
+  const observedShift = maxPairwiseShift(scoredViews.map((view) => view.target));
+  const predictedShift = maxPairwiseShift(scoredViews.map((view) => view.predicted));
+  const shiftGap = Math.abs(observedShift - predictedShift);
+  const hasAngleEffects = result.mix.fl > 0 ||
+    (result.mix.p !== 'none' && result.mix.pa > 0) ||
+    (result.mix.mic > 0 && (result.mix.m1 !== 'none' || result.mix.m2 !== 'none'));
+  const effectFit: AngleMatchAnalysis['effectFit'] =
+    observedShift < 3 && meanDe <= 4.5 ? 'stable'
+      : !hasAngleEffects ? 'unexplained'
+        : meanDe <= 5 && shiftGap <= 4 ? 'explains'
+          : meanDe <= 8 && shiftGap <= 8 ? 'partial'
+            : 'unexplained';
+  return {
+    ...result,
+    predicted: linearToHex(finalColour(result.mix, cal).rgb),
+    de: meanDe,
+    outOfGamut: meanDe > 4,
+    angleAnalysis: { views: scoredViews, meanDe, observedShift, predictedShift, effectFit },
+  };
+}
+
+function solveToners(
+  layers: Mix,
+  target: RGB,
+  targetHex: string,
+  cal: Calibration,
+  views?: readonly AngleObservation[],
+): MatchResult {
   const ids = TONERS.map((x) => x.id);
   type Cand = { set: string[]; w: number[]; e: number };
   let best: Cand | null = null as Cand | null;
   for (const k of [1, 2, 3]) {
     let bestK: Cand | null = null as Cand | null;
     for (const set of subsets(ids, k)) {
-      const [w, e] = optimise(set, layers, target, cal);
+      const [w, e] = optimise(set, layers, target, cal, views);
       if (!bestK || e < bestK.e) bestK = { set, w, e };
     }
     if (!best || bestK!.e < best.e - 0.5) best = bestK;
@@ -150,13 +251,16 @@ function solveToners(layers: Mix, target: RGB, targetHex: string, cal: Calibrati
   if (best!.e >= 1 && best!.set.length === 3) {
     for (const extra of ids.filter((id) => !best!.set.includes(id))) {
       const set = [...best!.set, extra];
-      const [w, e] = optimise(set, layers, target, cal);
+      const [w, e] = optimise(set, layers, target, cal, views);
       if (e < best!.e - 0.5) best = { set, w, e };
     }
   }
 
   const mix: Mix = { ...layers, t: toParts(best!.set, best!.w) };
-  const pred = finalColour(mix, cal).rgb, de = deltaE(pred, target);
+  const pred = finalColour(mix, cal).rgb;
+  const de = views?.length
+    ? views.reduce((sum, view) => sum + deltaE(colourAtViewAngle(mix, view.angle, cal), hexToLinear(view.hex)), 0) / views.length
+    : deltaE(pred, target);
   return { mix, de, predicted: linearToHex(pred), target: targetHex, outOfGamut: de > 4 };
 }
 

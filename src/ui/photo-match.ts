@@ -1,12 +1,18 @@
 import { medianRgb, srgbHex } from '../color/photo.ts';
+import type { ViewAngle } from '../color/mixing.ts';
 import type { RGB } from '../types.ts';
 import { $ } from './store.ts';
-import { matchCustomColour } from './search.ts';
+import { clearCurrentMatch, matchCustomColour } from './search.ts';
 
 const MAX_PHOTOS = 6;
 const MAX_FILE_BYTES = 20_000_000;
 const MAX_TOTAL_BYTES = 50_000_000;
 const MAX_IMAGE_EDGE = 1600;
+const VIEW_ANGLES: [ViewAngle, string][] = [
+  ['face', 'Face-on'],
+  ['mid', 'Mid-angle'],
+  ['grazing', 'Grazing'],
+];
 
 interface AnglePhoto {
   image: HTMLImageElement;
@@ -15,6 +21,7 @@ interface AnglePhoto {
   fileBytes: number;
   fileName: string;
   label: string;
+  angle: ViewAngle;
   sample: RGB | null;
   point: [number, number] | null;
 }
@@ -22,10 +29,6 @@ interface AnglePhoto {
 let photos: AnglePhoto[] = [];
 let loading = false;
 let notice = '';
-
-function clearMatch() {
-  $('matchOut').replaceChildren();
-}
 
 function updateStatus() {
   const sampled = photos.filter((photo) => photo.sample).length;
@@ -35,7 +38,7 @@ function updateStatus() {
       ? `Loading ${photos.length} photo${photos.length === 1 ? '' : 's'}…`
       : sampled < photos.length
         ? `Tap the painted area in each photo (${sampled} of ${photos.length} sampled). Avoid bright reflections.`
-        : `${sampled} view${sampled === 1 ? '' : 's'} ready. The sampled colours will be combined into one estimate.`;
+        : `${sampled} view${sampled === 1 ? '' : 's'} ready. Each view will be scored separately against the selected finish.`;
   $('photoMatchStatus').textContent = [notice, guidance].filter(Boolean).join(' ');
   $<HTMLButtonElement>('photoMatchBtn').disabled =
     loading || photos.length === 0 || sampled !== photos.length;
@@ -79,7 +82,7 @@ function samplePhoto(photo: AnglePhoto, canvas: HTMLCanvasElement, point: Pick<M
   if (!samples.length) return;
   photo.sample = medianRgb(samples);
   photo.point = [x, y];
-  clearMatch();
+  clearCurrentMatch();
   notice = '';
   renderPhotos();
   updateStatus();
@@ -98,7 +101,21 @@ function renderPhotos() {
     label.maxLength = 40;
     label.value = photo.label;
     label.setAttribute('aria-label', `Label for photo angle ${index + 1}`);
-    label.addEventListener('input', () => { photo.label = label.value; });
+    label.addEventListener('input', () => {
+      photo.label = label.value;
+      clearCurrentMatch();
+    });
+    const angle = document.createElement('select');
+    angle.setAttribute('aria-label', `Viewing angle for photo ${index + 1}`);
+    angle.innerHTML = VIEW_ANGLES.map(([value, title]) =>
+      `<option value="${value}">${title}</option>`).join('');
+    angle.value = photo.angle;
+    angle.addEventListener('change', () => {
+      photo.angle = angle.value as ViewAngle;
+      clearCurrentMatch();
+      notice = '';
+      updateStatus();
+    });
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'chip';
@@ -106,12 +123,12 @@ function renderPhotos() {
     remove.setAttribute('aria-label', `Remove photo angle ${index + 1}`);
     remove.addEventListener('click', () => {
       photos.splice(index, 1);
-      clearMatch();
+      clearCurrentMatch();
       notice = '';
       renderPhotos();
       updateStatus();
     });
-    heading.append(label, remove);
+    heading.append(label, angle, remove);
 
     const canvas = document.createElement('canvas');
     canvas.width = photo.width;
@@ -141,7 +158,7 @@ function renderPhotos() {
   });
 }
 
-function loadImage(file: File): Promise<AnglePhoto> {
+function loadImage(file: File, index: number): Promise<AnglePhoto> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -154,7 +171,8 @@ function loadImage(file: File): Promise<AnglePhoto> {
         height: Math.max(1, Math.round(image.naturalHeight * scale)),
         fileBytes: file.size,
         fileName: file.name,
-        label: `Angle ${photos.length + 1}`,
+        label: `Angle ${index}`,
+        angle: VIEW_ANGLES[(index - 1) % VIEW_ANGLES.length][0],
         sample: null,
         point: null,
       });
@@ -205,10 +223,11 @@ async function addPhotos(files: FileList | null) {
   }
 
   loading = true;
-  clearMatch();
+  clearCurrentMatch();
   updateStatus();
   const loaded = await Promise.all(accepted.map(async (file) => {
-    try { return await loadImage(file); } catch (error) {
+    const index = photos.length + accepted.indexOf(file) + 1;
+    try { return await loadImage(file, index); } catch (error) {
       notice = error instanceof Error ? error.message : 'A photo could not be read.';
       return null;
     }
@@ -224,9 +243,14 @@ function runMatch() {
   const target = medianRgb(photos.map((photo) => photo.sample!));
   const hex = srgbHex(target);
   const label = `Photo estimate · ${photos.length} view${photos.length === 1 ? '' : 's'}`;
+  const views = photos.map((photo, index) => ({
+    label: photo.label.trim() || `Angle ${index + 1}`,
+    angle: photo.angle,
+    hex: srgbHex(photo.sample!),
+  }));
   notice = `Matching ${photos.length} sampled view${photos.length === 1 ? '' : 's'} (${hex.toUpperCase()}).`;
   updateStatus();
-  matchCustomColour(hex, label);
+  matchCustomColour(hex, label, views);
 }
 
 export function initPhotoMatch() {

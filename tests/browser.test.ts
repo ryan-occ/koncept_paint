@@ -198,12 +198,24 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('#photoAngles canvas').count(), 3);
 
     for (const canvas of await page.locator('#photoAngles canvas').all()) await canvas.click();
+    await page.getByLabel('Viewing angle for photo 3').selectOption('grazing');
+    await page.locator('#finishSel').selectOption('pearl');
     await page.getByRole('button', { name: 'Find closest available mix' }).click();
     await page.getByRole('button', { name: 'Load into bench' }).waitFor();
 
     const match = page.locator('#matchOut');
-    assert.match(await match.innerText(), /Photo estimate · 3 views/);
-    assert.match(await match.innerText(), /ΔE \d+\.\d/);
+    const matchText = await match.innerText();
+    assert.match(matchText, /Photo estimate · 3 views/);
+    assert.match(matchText, /Mean ΔE \d+\.\d/);
+    assert.match(matchText, /Angle effect check/);
+    assert.match(matchText, /Observed shift .* modelled shift/);
+    assert.equal(await match.locator('.angle-reading').count(), 3);
+    assert.ok([
+      'No meaningful angle shift',
+      'explain this angle shift',
+      'explain part of this angle shift',
+      'do not explain this angle shift',
+    ].some((phrase) => matchText.includes(phrase)));
     assert.match(await page.locator('#photoMatchStatus').textContent() ?? '', /Matching 3 sampled views/);
     await page.getByRole('button', { name: 'Load into bench' }).click();
     assert.equal(await page.locator('#mixName').inputValue(), 'Photo estimate · 3 views');

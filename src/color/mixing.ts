@@ -59,6 +59,8 @@ export interface FinalColour {
   rgb: RGB;
 }
 
+export type ViewAngle = 'face' | 'mid' | 'grazing';
+
 /** Flat colour of the paint system: ground → base coats → mid-coat → candy. */
 export function finalColour(mix: Mix, cal: Calibration = EMPTY_CAL): FinalColour {
   const m = mixToners(mix.t, cal);
@@ -81,4 +83,51 @@ export function finalColour(mix: Mix, cal: Calibration = EMPTY_CAL): FinalColour
     rgb = rgb.map((c, i) => c * Math.max(t[i], 0.001) ** (mix.cc / 3)) as RGB;
   }
   return { m, cov, rgb };
+}
+
+/**
+ * Approximate the paint's angle-dependent appearance from its effect materials.
+ * This is a comparison model for photo matching, not a spectral or OEM paint simulation.
+ */
+export function colourAtViewAngle(mix: Mix, angle: ViewAngle, cal: Calibration = EMPTY_CAL): RGB {
+  const viewFactor: Record<ViewAngle, number> = { face: 0, mid: 0.55, grazing: 1 };
+  const factor = viewFactor[angle];
+  let rgb = finalColour(mix, cal).rgb.slice() as RGB;
+  if (factor === 0) return rgb;
+
+  const blend = (tint: RGB, amount: number) => {
+    const f = Math.max(0, Math.min(0.4, amount));
+    rgb = rgb.map((channel, i) => channel + (tint[i] - channel) * f) as RGB;
+  };
+  const silver = hexToLinear('#cfd3d8');
+  blend(silver, (mix.fl / 100) * 0.18 * factor);
+
+  const pearlTint: Record<string, string> = {
+    white: '#e8e8ea',
+    gold: '#e8c45d',
+    blue: '#658bd8',
+  };
+  if (mix.p !== 'none') {
+    blend(hexToLinear(pearlTint[mix.p]), (mix.pa / 100) * 0.12 * factor);
+  }
+
+  for (const [id, load, isFlop] of [
+    [mix.m1, mix.m1l, false],
+    [mix.m2, mix.m2l, true],
+  ] as [string, number, boolean][]) {
+    const powder = POWDERS[id];
+    if (!powder || id === 'none') continue;
+    const strength = midFactor(load, mix.mic);
+    const kindWeight: Record<string, number> = {
+      int: 0.3,
+      col: isFlop ? 0.32 : 0.22,
+      spark: 0.16,
+      diff: 0.2,
+      holo: 0.22,
+      alu: 0.16,
+      glass: 0.1,
+    };
+    blend(hexToLinear(powder.colour), strength * (kindWeight[powder.kind] ?? 0) * factor);
+  }
+  return rgb;
 }

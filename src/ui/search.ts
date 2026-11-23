@@ -1,5 +1,5 @@
 import { COLOURS, searchColours, type NamedColour } from '../data/colors.ts';
-import { matchColour, type Finish, type MatchResult } from '../color/solve.ts';
+import { matchColour, matchColourAcrossAngles, type AngleObservation, type Finish, type MatchResult } from '../color/solve.ts';
 import { verdict } from '../color/calibration.ts';
 import { GROUNDS, TONERS } from '../data/toners.ts';
 import { POWDERS } from '../data/powders.ts';
@@ -9,6 +9,7 @@ import { loadPreset } from './bench.ts';
 export const FINISHES: [Finish, string][] = [['solid', 'Solid'], ['metallic', 'Metallic'], ['pearl', 'Pearl'], ['candy', 'Candy'], ['satin', 'Satin'], ['matte', 'Matte']];
 let picked: NamedColour | null = null;
 let last: MatchResult | null = null;
+let pickedViews: readonly AngleObservation[] | null = null;
 let job = 0;
 
 function results(list: NamedColour[]) {
@@ -22,6 +23,7 @@ function results(list: NamedColour[]) {
 
 function choose(c: NamedColour) {
   picked = c;
+  pickedViews = null;
   $<HTMLSelectElement>('finishSel').value = c.finish;
   $<HTMLInputElement>('colorPick').value = c.hex;
   solve();
@@ -34,7 +36,9 @@ function solve() {
   // Let the message paint before the solver runs.
   setTimeout(() => {
     if (mine !== job) return;
-    last = matchColour(c.hex, finish, c.name, cal);
+    last = pickedViews?.length
+      ? matchColourAcrossAngles(c.hex, finish, c.name, pickedViews, cal)
+      : matchColour(c.hex, finish, c.name, cal);
     render(last, c, finish);
   }, 30);
 }
@@ -50,12 +54,30 @@ function render(r: MatchResult, c: NamedColour, finish: Finish) {
     r.mix.cc ? `${r.mix.cc} candy coats, tint ${r.mix.cd.toUpperCase()}` : '',
     r.mix.fin !== 'gloss' ? `${r.mix.fin} clear` : '',
   ].filter(Boolean).join(' · ');
+  const scoreLabel = r.angleAnalysis ? `Mean ΔE ${r.de.toFixed(1)}` : `ΔE ${r.de.toFixed(1)}`;
+  const effectCopy = {
+    stable: 'No meaningful angle shift was observed; the selected finish is consistent across views.',
+    explains: 'The selected finish and its effect materials explain this angle shift.',
+    partial: 'The selected effect materials explain part of this angle shift.',
+    unexplained: 'The available effect materials do not explain this angle shift for the selected finish.',
+  } as const;
+  const angleAnalysis = r.angleAnalysis ? `<div class="angle-analysis">
+    <b>Angle effect check</b>
+    <p>Observed shift ${r.angleAnalysis.observedShift.toFixed(1)} ΔE · modelled shift ${r.angleAnalysis.predictedShift.toFixed(1)} ΔE. ${effectCopy[r.angleAnalysis.effectFit]}</p>
+    <div class="angle-readings">${r.angleAnalysis.views.map((view) => `<div class="angle-reading">
+      <b>${esc(view.label)} · ${view.angle}</b>
+      <div class="angle-swatches"><span><i style="background:${view.target}"></i>Photo</span><span><i style="background:${view.predicted}"></i>Model</span></div>
+      <small>ΔE ${view.de.toFixed(1)}</small>
+    </div>`).join('')}</div>
+    <small class="caveat">Angle predictions are an estimate; lighting and camera colour shifts can affect the comparison.</small>
+  </div>` : '';
   $('matchOut').innerHTML = `<div class="match">
     <div class="pair"><div><i style="background:${r.target}"></i><small>Target</small></div><div><i style="background:${r.predicted}"></i><small>Predicted</small></div></div>
     <div>
       <b>${esc(c.name)}</b> · ${finish}<br>
-      <span class="${r.outOfGamut ? 'warn' : ''}">ΔE ${r.de.toFixed(1)}: ${r.outOfGamut ? 'out of reach with these toners — closest possible shown' : verdict(r.de)}</span>
+      <span class="${r.outOfGamut ? 'warn' : ''}">${scoreLabel}: ${r.outOfGamut ? 'out of reach with these toners — closest possible shown' : verdict(r.de)}</span>
       <p class="cover">${esc(toners)}<br>${esc(extras)}</p>
+      ${angleAnalysis}
       <button class="btn" type="button" id="loadMatch">Load into bench</button>
     </div></div>`;
   $('loadMatch').onclick = () => { if (last) loadPreset(last.mix); $('mixName').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
@@ -83,9 +105,18 @@ export function initSearch() {
   results(COLOURS.filter((c) => ['Black cherry', 'Candy apple red', 'British racing green', 'Midnight blue', 'Cement grey', 'Pearl white'].includes(c.name)));
 }
 
-export function matchCustomColour(hex: string, name: string) {
+export function matchCustomColour(hex: string, name: string, views?: readonly AngleObservation[]) {
   const finish = $<HTMLSelectElement>('finishSel').value as Finish;
   picked = { name, hex, finish, tags: '' };
+  pickedViews = views ?? null;
   $<HTMLInputElement>('colorPick').value = hex;
   solve();
+}
+
+export function clearCurrentMatch() {
+  job++;
+  picked = null;
+  pickedViews = null;
+  last = null;
+  $('matchOut').replaceChildren();
 }
