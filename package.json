@@ -15,6 +15,7 @@
     "test:replit": "node --experimental-strip-types --test tests/browser.test.ts tests/mix-backup.test.ts tests/calibration-backup.test.ts"
   },
   "dependencies": {
+    "pg": "^8.23.1",
     "three": "^0.170.0"
   },
   "devDependencies": {

@@ -3,15 +3,24 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import pg from 'pg';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const DIST = resolve(ROOT, 'dist');
 const COOKIE_NAME = 'paint_session';
 const SESSION_SECONDS = 8 * 60 * 60;
-const RATE_WINDOW_MS = 15 * 60 * 1000;
+const RATE_WINDOW_MS = Number(process.env.AUTH_RATE_WINDOW_MS ?? 15 * 60 * 1000);
 const ADDRESS_LIMIT = 8;
 const GLOBAL_LIMIT = 80;
-const attempts = new Map();
+const RATE_LIMIT_LOCK_ID = 1_209_941_643;
+const { Pool } = pg;
+const databasePool = process.env.DATABASE_URL
+  ? new Pool({ connectionString: process.env.DATABASE_URL, max: 4 })
+  : null;
+
+if (!Number.isSafeInteger(RATE_WINDOW_MS) || RATE_WINDOW_MS < 1000) {
+  throw new Error('AUTH_RATE_WINDOW_MS must be an integer of at least 1000 milliseconds.');
+}
 
 const configured = () =>
   /^\d{6}$/.test(process.env.PASSCODE ?? '') && Boolean(process.env.SESSION_SECRET);
@@ -44,38 +53,75 @@ function hasSession(request) {
 function clientKey(request) {
   const forwarded = request.headers['x-forwarded-for'];
   const addresses = typeof forwarded === 'string' ? forwarded.split(',').map((value) => value.trim()) : [];
-  return `address:${addresses.at(-1) || request.socket.remoteAddress || 'unknown'}`;
+  const address = addresses.at(-1) || request.socket.remoteAddress || 'unknown';
+  return `address:${createHmac('sha256', process.env.SESSION_SECRET).update(address).digest('hex')}`;
 }
 
-function bucketFor(key, now) {
-  let bucket = attempts.get(key);
-  if (!bucket || bucket.resetAt <= now) {
-    bucket = { count: 0, resetAt: now + RATE_WINDOW_MS };
-    attempts.set(key, bucket);
-  }
-  return bucket;
-}
+async function finishLoginAttempt(key, succeeded) {
+  if (!databasePool) throw new Error('Shared login protection is unavailable.');
 
-function blockedUntil(key, now) {
-  const address = bucketFor(key, now);
-  const global = bucketFor('global', now);
-  if (address.count >= ADDRESS_LIMIT) return address.resetAt;
-  if (global.count >= GLOBAL_LIMIT) return global.resetAt;
-  return 0;
-}
+  const client = await databasePool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [RATE_LIMIT_LOCK_ID]);
 
-function recordFailure(key, now) {
-  bucketFor(key, now).count += 1;
-  bucketFor('global', now).count += 1;
-  if (attempts.size > 1000) {
-    for (const [id, bucket] of attempts) {
-      if (bucket.resetAt <= now) attempts.delete(id);
+    const { rows: [{ now: databaseNow }] } = await client.query('SELECT clock_timestamp() AS now');
+    const nowDate = new Date(databaseNow);
+    const now = nowDate.getTime();
+    await client.query('DELETE FROM paint_login_attempts WHERE reset_at <= $1', [nowDate]);
+    const result = await client.query(
+      'SELECT bucket_key, failure_count, reset_at FROM paint_login_attempts WHERE bucket_key = ANY($1::text[])',
+      [[key, 'global']],
+    );
+    const buckets = new Map(result.rows.map((row) => [
+      row.bucket_key,
+      { count: row.failure_count, resetAt: new Date(row.reset_at).getTime() },
+    ]));
+    const address = buckets.get(key);
+    const global = buckets.get('global');
+    const blockedUntil = address?.count >= ADDRESS_LIMIT
+      ? address.resetAt
+      : global?.count >= GLOBAL_LIMIT ? global.resetAt : 0;
+
+    if (blockedUntil) {
+      await client.query('COMMIT');
+      return { blockedUntil };
     }
-  }
-}
 
-function clearAddressFailures(key) {
-  attempts.delete(key);
+    if (succeeded) {
+      await client.query('DELETE FROM paint_login_attempts WHERE bucket_key = $1', [key]);
+    } else {
+      const resetAt = new Date(now + RATE_WINDOW_MS);
+      for (const bucketKey of [key, 'global']) {
+        await client.query(
+          `INSERT INTO paint_login_attempts (bucket_key, failure_count, reset_at)
+           VALUES ($1, 1, $2)
+           ON CONFLICT (bucket_key) DO UPDATE SET
+             failure_count = CASE
+               WHEN paint_login_attempts.reset_at <= $3 THEN 1
+               ELSE paint_login_attempts.failure_count + 1
+             END,
+             reset_at = CASE
+               WHEN paint_login_attempts.reset_at <= $3 THEN $2
+               ELSE paint_login_attempts.reset_at
+             END`,
+          [bucketKey, resetAt, nowDate],
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    return { blockedUntil: 0 };
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // Preserve the original database error.
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 function secureHeaders(response) {
@@ -214,38 +260,39 @@ async function handleRequest(request, response, { dev, vite }) {
   if (url.pathname === '/api/auth/login' && request.method === 'POST') {
     if (!configured()) return sendJson(response, 503, { error: 'Passcode access is not configured.' });
     const key = clientKey(request);
-    const now = Date.now();
-    const blocked = blockedUntil(key, now);
-    if (blocked) {
+    let failure;
+    if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) {
+      failure = { status: 415, error: 'Use the passcode form to continue.' };
+    } else {
+      try {
+        const body = await readJson(request);
+        if (typeof body?.passcode !== 'string' || !/^\d{6}$/.test(body.passcode)) {
+          failure = { status: 400, error: 'Enter a six-digit passcode.' };
+        } else {
+          const submitted = Buffer.from(body.passcode);
+          const expected = Buffer.from(process.env.PASSCODE);
+          if (submitted.length !== expected.length || !timingSafeEqual(submitted, expected)) {
+            failure = { status: 401, error: 'That passcode did not match. Try again.' };
+          }
+        }
+      } catch (error) {
+        failure = { status: error.status ?? 400, error: error.message };
+      }
+    }
+
+    let rateLimit;
+    try {
+      rateLimit = await finishLoginAttempt(key, !failure);
+    } catch {
+      return sendJson(response, 503, { error: 'Login protection is temporarily unavailable. Try again later.' });
+    }
+    if (rateLimit.blockedUntil) {
+      const now = Date.now();
       return sendJson(response, 429, { error: 'Too many attempts. Wait before trying again.' }, {
-        'Retry-After': String(Math.max(1, Math.ceil((blocked - now) / 1000))),
+        'Retry-After': String(Math.max(1, Math.ceil((rateLimit.blockedUntil - now) / 1000))),
       });
     }
-    if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) {
-      recordFailure(key, now);
-      return sendJson(response, 415, { error: 'Use the passcode form to continue.' });
-    }
-
-    let body;
-    try {
-      body = await readJson(request);
-    } catch (error) {
-      recordFailure(key, now);
-      return sendJson(response, error.status ?? 400, { error: error.message });
-    }
-    if (typeof body?.passcode !== 'string' || !/^\d{6}$/.test(body.passcode)) {
-      recordFailure(key, now);
-      return sendJson(response, 400, { error: 'Enter a six-digit passcode.' });
-    }
-
-    const submitted = Buffer.from(body.passcode);
-    const expected = Buffer.from(process.env.PASSCODE);
-    if (submitted.length !== expected.length || !timingSafeEqual(submitted, expected)) {
-      recordFailure(key, now);
-      return sendJson(response, 401, { error: 'That passcode did not match. Try again.' });
-    }
-
-    clearAddressFailures(key);
+    if (failure) return sendJson(response, failure.status, { error: failure.error });
     setSessionCookie(request, response);
     return sendJson(response, 200, { authenticated: true });
   }
@@ -267,7 +314,7 @@ async function handleRequest(request, response, { dev, vite }) {
   if (dev) {
     vite.middlewares(request, response, (error) => {
       if (error) {
-        console.error('Development server request failed:', error);
+        console.error('Development server request failed.');
         if (!response.headersSent) {
           response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
           response.end('Development server error.');
@@ -321,7 +368,7 @@ export async function startServer({ dev = process.argv.includes('--dev') } = {})
   let vite;
   const server = createServer((request, response) => {
     void handleRequest(request, response, { dev, vite }).catch((error) => {
-      console.error('Request failed:', error);
+      console.error('Request failed.');
       if (!response.headersSent) {
         secureHeaders(response);
         response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -356,6 +403,7 @@ export async function startServer({ dev = process.argv.includes('--dev') } = {})
   const close = async () => {
     await vite?.close();
     await new Promise((resolveClose) => server.close(resolveClose));
+    await databasePool?.end();
   };
   process.once('SIGINT', close);
   process.once('SIGTERM', close);
