@@ -1,5 +1,5 @@
-import { medianRgb, srgbHex } from '../color/photo.ts';
 import type { ViewAngle } from '../color/mixing.ts';
+import { correctPhotoSample, medianRgb, srgbHex } from '../color/photo.ts';
 import type { RGB } from '../types.ts';
 import { $ } from './store.ts';
 import { clearCurrentMatch, matchCustomColour } from './search.ts';
@@ -24,42 +24,67 @@ interface AnglePhoto {
   angle: ViewAngle;
   sample: RGB | null;
   point: [number, number] | null;
+  referenceSample: RGB | null;
+  referencePoint: [number, number] | null;
 }
 
 let photos: AnglePhoto[] = [];
 let loading = false;
 let notice = '';
+let sampleMode: 'paint' | 'reference' = 'paint';
+
+function referenceHex(): string | null {
+  const target = $<HTMLSelectElement>('photoReferenceTarget').value;
+  if (target === 'gray') return '#808080';
+  if (target === 'white') return '#f3f3f2';
+  if (target === 'custom') return $<HTMLInputElement>('photoReferenceColor').value;
+  return null;
+}
+
+function updateSampleMode() {
+  const referenceEnabled = Boolean(referenceHex());
+  if (!referenceEnabled) sampleMode = 'paint';
+  $<HTMLButtonElement>('photoSamplePaint').setAttribute('aria-pressed', String(sampleMode === 'paint'));
+  $<HTMLButtonElement>('photoSampleReference').setAttribute('aria-pressed', String(sampleMode === 'reference'));
+  $<HTMLButtonElement>('photoSampleReference').disabled = !referenceEnabled;
+}
 
 function updateStatus() {
   const sampled = photos.filter((photo) => photo.sample).length;
+  const referenced = photos.filter((photo) => photo.referenceSample).length;
+  const reference = referenceHex();
   const guidance = photos.length === 0
     ? 'Choose one to six photos. They stay in this browser and are not sent to a server. Photo results are estimates, not factory formulas.'
     : loading
       ? `Loading ${photos.length} photo${photos.length === 1 ? '' : 's'}…`
-      : sampled < photos.length
-        ? `Tap the painted area in each photo (${sampled} of ${photos.length} sampled). Avoid bright reflections.`
-        : `${sampled} view${sampled === 1 ? '' : 's'} ready. Each view will be scored separately against the selected finish.`;
+      : reference && referenced < photos.length
+        ? `Choose Sample reference and tap the ${reference === '#808080' ? 'neutral gray' : reference === '#f3f3f2' ? 'white' : 'known-colour'} patch in each photo (${referenced} of ${photos.length} sampled).`
+        : sampled < photos.length
+          ? `Choose Sample paint and tap the painted area in each photo (${sampled} of ${photos.length} sampled). Avoid bright reflections.`
+          : `${sampled} view${sampled === 1 ? '' : 's'} ready. ${reference ? 'Samples will be corrected using the reference patch. ' : ''}Each view will be scored separately against the selected finish.`;
   $('photoMatchStatus').textContent = [notice, guidance].filter(Boolean).join(' ');
   $<HTMLButtonElement>('photoMatchBtn').disabled =
-    loading || photos.length === 0 || sampled !== photos.length;
+    loading || photos.length === 0 || sampled !== photos.length || Boolean(reference && referenced !== photos.length);
 }
 
 function drawPhoto(canvas: HTMLCanvasElement, photo: AnglePhoto) {
   const context = canvas.getContext('2d');
   if (!context) return;
   context.drawImage(photo.image, 0, 0, photo.width, photo.height);
-  if (!photo.point) return;
-  const [x, y] = photo.point;
   const radius = Math.max(6, Math.min(photo.width, photo.height) / 45);
-  context.lineWidth = Math.max(2, radius / 7);
-  context.strokeStyle = '#000';
-  context.beginPath();
-  context.arc(x, y, radius + 2, 0, Math.PI * 2);
-  context.stroke();
-  context.strokeStyle = '#f2b705';
-  context.beginPath();
-  context.arc(x, y, radius, 0, Math.PI * 2);
-  context.stroke();
+  for (const [point, colour] of [[photo.point, '#f2b705'], [photo.referencePoint, '#38bdf8']] as const) {
+    if (!point) continue;
+    const [x, y] = point;
+    context.lineWidth = Math.max(2, radius / 7);
+    context.strokeStyle = '#000';
+    context.beginPath();
+    context.arc(x, y, radius + 2, 0, Math.PI * 2);
+    context.stroke();
+    context.strokeStyle = colour;
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.stroke();
+  }
 }
 
 function samplePhoto(photo: AnglePhoto, canvas: HTMLCanvasElement, point: Pick<MouseEvent, 'clientX' | 'clientY'>) {
@@ -80,10 +105,17 @@ function samplePhoto(photo: AnglePhoto, canvas: HTMLCanvasElement, point: Pick<M
     if (pixels[i + 3] > 0) samples.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
   }
   if (!samples.length) return;
-  photo.sample = medianRgb(samples);
-  photo.point = [x, y];
+  if (sampleMode === 'reference' && referenceHex()) {
+    photo.referenceSample = medianRgb(samples);
+    photo.referencePoint = [x, y];
+    if (photos.every((angle) => angle.referenceSample)) sampleMode = 'paint';
+  } else {
+    photo.sample = medianRgb(samples);
+    photo.point = [x, y];
+  }
   clearCurrentMatch();
   notice = '';
+  updateSampleMode();
   renderPhotos();
   updateStatus();
 }
@@ -135,7 +167,7 @@ function renderPhotos() {
     canvas.height = photo.height;
     canvas.tabIndex = 0;
     canvas.setAttribute('role', 'button');
-    canvas.setAttribute('aria-label', `Photo angle ${index + 1}; click to sample a spot, or press Enter to sample the centre`);
+    canvas.setAttribute('aria-label', `Photo angle ${index + 1}; click to sample ${sampleMode === 'reference' ? 'the colour reference' : 'paint'}, or press Enter to sample the centre`);
     canvas.addEventListener('click', (event) => samplePhoto(photo, canvas, event));
     canvas.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -150,9 +182,11 @@ function renderPhotos() {
 
     const detail = document.createElement('p');
     detail.className = 'photo-angle-detail';
-    detail.textContent = photo.sample
-      ? `Sampled ${srgbHex(photo.sample).toUpperCase()}`
-      : `Tap to sample · ${photo.fileName}`;
+    detail.textContent = [
+      photo.sample ? `Paint ${srgbHex(photo.sample).toUpperCase()}` : 'Paint not sampled',
+      referenceHex() ? (photo.referenceSample ? `Reference ${srgbHex(photo.referenceSample).toUpperCase()}` : 'Reference not sampled') : '',
+      photo.fileName,
+    ].filter(Boolean).join(' · ');
     card.append(heading, canvas, detail);
     list.append(card);
   });
@@ -175,6 +209,8 @@ function loadImage(file: File, index: number): Promise<AnglePhoto> {
         angle: VIEW_ANGLES[(index - 1) % VIEW_ANGLES.length][0],
         sample: null,
         point: null,
+        referenceSample: null,
+        referencePoint: null,
       });
     };
     image.onerror = () => {
@@ -233,20 +269,29 @@ async function addPhotos(files: FileList | null) {
     }
   }));
   photos = [...photos, ...loaded.filter((photo): photo is AnglePhoto => photo !== null)];
+  if (referenceHex()) sampleMode = 'reference';
   loading = false;
+  updateSampleMode();
   renderPhotos();
   updateStatus();
 }
 
 function runMatch() {
   if (loading || photos.length === 0 || photos.some((photo) => !photo.sample)) return;
-  const target = medianRgb(photos.map((photo) => photo.sample!));
+  const reference = referenceHex();
+  if (reference && photos.some((photo) => !photo.referenceSample)) return;
+  const correctedSamples = photos.map((photo) =>
+    reference
+      ? correctPhotoSample(photo.sample!, photo.referenceSample!, reference)
+      : photo.sample!,
+  );
+  const target = medianRgb(correctedSamples);
   const hex = srgbHex(target);
   const label = `Photo estimate · ${photos.length} view${photos.length === 1 ? '' : 's'}`;
   const views = photos.map((photo, index) => ({
     label: photo.label.trim() || `Angle ${index + 1}`,
     angle: photo.angle,
-    hex: srgbHex(photo.sample!),
+    hex: srgbHex(correctedSamples[index]),
   }));
   notice = `Matching ${photos.length} sampled view${photos.length === 1 ? '' : 's'} (${hex.toUpperCase()}).`;
   updateStatus();
@@ -260,6 +305,46 @@ export function initPhotoMatch() {
     void addPhotos(files);
     input.value = '';
   });
+  $('photoReferenceTarget').addEventListener('change', () => {
+    for (const photo of photos) {
+      photo.referenceSample = null;
+      photo.referencePoint = null;
+    }
+    sampleMode = referenceHex() ? 'reference' : 'paint';
+    $('photoReferenceColorRow').hidden = $<HTMLSelectElement>('photoReferenceTarget').value !== 'custom';
+    clearCurrentMatch();
+    notice = '';
+    updateSampleMode();
+    renderPhotos();
+    updateStatus();
+  });
+  $('photoReferenceColor').addEventListener('input', () => {
+    for (const photo of photos) {
+      photo.referenceSample = null;
+      photo.referencePoint = null;
+    }
+    sampleMode = 'reference';
+    clearCurrentMatch();
+    notice = '';
+    updateSampleMode();
+    renderPhotos();
+    updateStatus();
+  });
+  $('photoSamplePaint').addEventListener('click', () => {
+    sampleMode = 'paint';
+    updateSampleMode();
+    renderPhotos();
+    updateStatus();
+  });
+  $('photoSampleReference').addEventListener('click', () => {
+    if (!referenceHex()) return;
+    sampleMode = 'reference';
+    updateSampleMode();
+    renderPhotos();
+    updateStatus();
+  });
   $('photoMatchBtn').addEventListener('click', runMatch);
+  $('photoReferenceColorRow').hidden = true;
+  updateSampleMode();
   updateStatus();
 }

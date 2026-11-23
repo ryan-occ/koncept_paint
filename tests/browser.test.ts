@@ -221,6 +221,47 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('#mixName').inputValue(), 'Photo estimate · 3 views');
   });
 
+  it('corrects a known colour cast with a neutral reference in each photo', async () => {
+    const srgb = (linear: number) =>
+      Math.round((linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055) * 255)
+        .toString(16).padStart(2, '0');
+    const cast = (hex: string, gains: number[]) => {
+      const values = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255);
+      const linear = values.map((value) => (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4));
+      return `#${linear.map((value, index) => srgb(value * gains[index])).join('')}`;
+    };
+    const svg = (paint: string, reference: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="120"><rect width="90" height="120" fill="${paint}"/><rect x="90" width="90" height="120" fill="${reference}"/></svg>`;
+    const actualPaint = '#788ca0';
+    const actualReference = '#808080';
+    assert.equal(await page.locator('#photoReferenceColorRow').isVisible(), false);
+    await page.locator('#photoReferenceTarget').selectOption('custom');
+    assert.equal(await page.locator('#photoReferenceColorRow').isVisible(), true);
+    await page.locator('#photoReferenceTarget').selectOption('gray');
+    await page.locator('#photoMatchFiles').setInputFiles([
+      { name: 'warm.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg(cast(actualPaint, [0.75, 1.1, 1.2]), cast(actualReference, [0.75, 1.1, 1.2]))) },
+      { name: 'cool.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg(cast(actualPaint, [1.15, 0.8, 0.9]), cast(actualReference, [1.15, 0.8, 0.9]))) },
+    ]);
+    await page.locator('#photoAngles canvas').nth(0).waitFor();
+    assert.equal(await page.locator('#photoSampleReference').getAttribute('aria-pressed'), 'true');
+    for (const canvas of await page.locator('#photoAngles canvas').all()) {
+      const box = await canvas.boundingBox();
+      assert.ok(box);
+      await canvas.click({ position: { x: box.width * 0.75, y: box.height / 2 } });
+    }
+    assert.equal(await page.locator('#photoSamplePaint').getAttribute('aria-pressed'), 'true', await page.locator('#photoMatchStatus').textContent() ?? '');
+    for (const canvas of await page.locator('#photoAngles canvas').all()) {
+      const box = await canvas.boundingBox();
+      assert.ok(box);
+      await canvas.click({ position: { x: box.width * 0.25, y: box.height / 2 } });
+    }
+    assert.equal(await page.locator('#photoMatchBtn').isEnabled(), true);
+    await page.getByRole('button', { name: 'Find closest available mix' }).click();
+    await page.getByRole('button', { name: 'Load into bench' }).waitFor();
+    assert.match(await page.locator('#photoMatchStatus').textContent() ?? '', /Matching 2 sampled views/);
+    assert.match(await page.locator('#matchOut').innerText(), /Photo estimate · 2 views/);
+  });
+
   it('prints the same mixing sheet on A4 or Letter paper', async () => {
     await page.evaluate(() => {
       window.print = () => {

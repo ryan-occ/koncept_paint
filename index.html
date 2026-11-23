@@ -47,6 +47,23 @@
         <label class="btn ghost photo-upload">Take or add angle photos
           <input id="photoMatchFiles" type="file" accept="image/*" capture="environment" multiple hidden>
         </label>
+          <div class="photo-reference">
+            <label for="photoReferenceTarget">Colour reference (optional)</label>
+            <select id="photoReferenceTarget">
+              <option value="none">No reference</option>
+              <option value="gray">Neutral gray card (#808080)</option>
+              <option value="white">White card (#f3f3f2)</option>
+              <option value="custom">Custom known colour</option>
+            </select>
+            <label id="photoReferenceColorRow" hidden>Known reference colour
+              <input id="photoReferenceColor" type="color" value="#808080">
+            </label>
+            <p class="photo-angle-detail">If using a reference, include the same known patch in every angle photo. Sample that patch in each view before sampling the paint.</p>
+            <div class="photo-sample-modes" aria-label="Choose what to sample">
+              <button class="chip" id="photoSamplePaint" type="button" aria-pressed="true">Sample paint</button>
+              <button class="chip" id="photoSampleReference" type="button" aria-pressed="false">Sample reference</button>
+            </div>
+          </div>
         <div id="photoAngles" class="photo-angles"></div>
         <div class="photo-match-actions">
           <button class="btn" id="photoMatchBtn" type="button" disabled>Find closest available mix</button>
