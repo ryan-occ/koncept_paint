@@ -95,12 +95,13 @@ describe('paint booth browser flows', { concurrency: false }, () => {
   });
 
   it('loads a preset, saves the mix, and restores it after a page reload', async () => {
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Library' }).click();
     await page.getByRole('button', { name: 'Teal metallic', exact: true }).click();
     assert.equal(await page.locator('#rTitle').textContent(), 'Teal metallic');
     assert.equal(await page.locator('#o_fl').textContent(), '65%');
 
     await page.getByLabel('Mix name').fill('Browser saved teal');
-    await page.getByRole('button', { name: 'Save mix' }).click();
+    await page.locator('#saveBtn').click();
 
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('pbs-mixes') || '[]'));
     assert.equal(saved[0].n, 'Browser saved teal');
@@ -187,6 +188,9 @@ describe('paint booth browser flows', { concurrency: false }, () => {
   });
 
   it('matches a car colour from multiple angle photos and loads the closest mix', async () => {
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Find colour' }).click();
+    await page.locator('#finishSel').selectOption('pearl');
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Photo match' }).click();
     const svg = (colour: string) =>
       `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="120"><rect width="180" height="120" fill="${colour}"/></svg>`;
     await page.locator('#photoMatchFiles').setInputFiles([
@@ -199,8 +203,8 @@ describe('paint booth browser flows', { concurrency: false }, () => {
 
     for (const canvas of await page.locator('#photoAngles canvas').all()) await canvas.click();
     await page.getByLabel('Viewing angle for photo 3').selectOption('grazing');
-    await page.locator('#finishSel').selectOption('pearl');
     await page.getByRole('button', { name: 'Find closest available mix' }).click();
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Find colour' }).click();
     await page.getByRole('button', { name: 'Load into bench' }).waitFor();
 
     const match = page.locator('#matchOut');
@@ -221,7 +225,7 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('#mixName').inputValue(), 'Photo estimate · 3 views');
 
     await page.evaluate(() => { window.print = () => {}; });
-    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    await page.getByRole('button', { name: 'Print sheet' }).click();
     const sheet = page.locator('#printSheet');
     assert.equal(await sheet.locator('.ps-angle-table tbody tr').count(), 3);
     assert.match(await sheet.innerText(), /Photo angle comparison/);
@@ -232,13 +236,16 @@ describe('paint booth browser flows', { concurrency: false }, () => {
 
     const printedAngleSection = await sheet.locator('.ps-angle-analysis').innerText();
     await page.locator('#printPageSize').selectOption('Letter');
-    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    await page.getByRole('button', { name: 'Print sheet' }).click();
     assert.equal(await sheet.locator('.ps-angle-table tbody tr').count(), 3);
     assert.equal(await sheet.locator('.ps-angle-analysis').innerText(), printedAngleSection);
     assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*Letter portrait/);
   });
 
   it('saves, reopens, renames, and removes a photo comparison with its formula', async () => {
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Find colour' }).click();
+    await page.locator('#finishSel').selectOption('pearl');
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Photo match' }).click();
     const svg = (colour: string) =>
       `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="120"><rect width="180" height="120" fill="${colour}"/></svg>`;
     await page.locator('#photoMatchFiles').setInputFiles([
@@ -247,13 +254,15 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     ]);
     await page.locator('#photoAngles canvas').nth(0).waitFor();
     for (const canvas of await page.locator('#photoAngles canvas').all()) await canvas.click();
-    await page.locator('#finishSel').selectOption('pearl');
     await page.getByRole('button', { name: 'Find closest available mix' }).click();
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Find colour' }).click();
     await page.getByRole('button', { name: 'Load into bench' }).waitFor();
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Photo match' }).click();
     await page.getByLabel('Saved comparison name').fill('Workshop bonnet');
     await page.getByRole('button', { name: 'Save comparison' }).click();
     await page.getByRole('button', { name: 'Open saved comparison Workshop bonnet' }).waitFor();
 
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Find colour' }).click();
     const savedOutput = await page.locator('#matchOut').innerText();
     const stored = await page.evaluate(async () => {
       const request = indexedDB.open('koncept-paint-photo-matches', 1);
@@ -284,8 +293,10 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     );
 
     await page.reload();
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Photo match' }).click();
     await page.getByRole('button', { name: 'Open saved comparison Workshop bonnet' }).waitFor();
     await page.getByRole('button', { name: 'Open saved comparison Workshop bonnet' }).click();
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Find colour' }).click();
     assert.equal(await page.locator('#photoAngles canvas').count(), 2);
     assert.equal(await page.locator('#matchOut .angle-reading').count(), 2);
     assert.equal(
@@ -295,6 +306,7 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     await page.getByRole('button', { name: 'Load into bench' }).click();
     assert.equal(await page.locator('#mixName').inputValue(), stored[0].formulaName);
 
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Photo match' }).click();
     await page.getByLabel('Name for saved comparison Workshop bonnet').fill('Side panel repair');
     await page.getByRole('button', { name: 'Rename saved comparison Workshop bonnet' }).click();
     await page.getByRole('button', { name: 'Open saved comparison Side panel repair' }).waitFor();
@@ -303,6 +315,7 @@ describe('paint booth browser flows', { concurrency: false }, () => {
   });
 
   it('corrects a known colour cast with a neutral reference in each photo', async () => {
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Photo match' }).click();
     const srgb = (linear: number) =>
       Math.round((linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055) * 255)
         .toString(16).padStart(2, '0');
@@ -338,22 +351,24 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     }
     assert.equal(await page.locator('#photoMatchBtn').isEnabled(), true);
     await page.getByRole('button', { name: 'Find closest available mix' }).click();
+    await page.locator('.tabs[data-group="lib"]').getByRole('tab', { name: 'Find colour' }).click();
     await page.getByRole('button', { name: 'Load into bench' }).waitFor();
     assert.match(await page.locator('#photoMatchStatus').textContent() ?? '', /Matching 2 sampled views/);
     assert.match(await page.locator('#matchOut').innerText(), /Photo estimate · 2 views/);
   });
 
   it('prints the same mixing sheet on A4 or Letter paper', async () => {
+    await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Recipe & guide' }).click();
     await page.evaluate(() => {
       window.print = () => {
         const root = document.documentElement;
         root.dataset.printCount = String(Number(root.dataset.printCount || 0) + 1);
       };
     });
-    const paperSize = page.getByRole('combobox', { name: 'Page size' });
+    const paperSize = page.getByRole('combobox', { name: 'Print page size' });
     assert.equal(await paperSize.inputValue(), 'A4');
 
-    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    await page.getByRole('button', { name: 'Print sheet' }).click();
     assert.equal(await page.locator('html').getAttribute('data-print-count'), '1');
     assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*A4 portrait/);
     assert.deepEqual(
@@ -362,15 +377,15 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     );
     await page.emulateMedia({ media: 'print' });
     assert.equal(await page.locator('#printSheet').evaluate((el) => getComputedStyle(el).display), 'block');
-    assert.equal(await page.locator('.wrap').evaluate((el) => getComputedStyle(el).display), 'none');
+    assert.equal(await page.locator('.ws').evaluate((el) => getComputedStyle(el).display), 'none');
     await page.emulateMedia({ media: 'screen' });
 
     await page.locator('.sheet-details summary').click();
     await page.getByLabel('Job number').fill('JOB-204');
     await page.getByLabel('Vehicle / panels').fill('Van & trailer');
-    await page.getByLabel('Paint system').fill('Brand <A> "Series"');
+    await page.locator('#sheetPaintSystem').fill('Brand <A> "Series"');
     await page.getByLabel('Technician / mixed by').fill('<img src=x onerror=alert(1)>');
-    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    await page.getByRole('button', { name: 'Print sheet' }).click();
 
     assert.equal(await page.locator('html').getAttribute('data-print-count'), '2');
     const fields = await page.locator('#printSheet .ps-job tr').evaluateAll((rows) =>
@@ -391,16 +406,17 @@ describe('paint booth browser flows', { concurrency: false }, () => {
 
     await page.emulateMedia({ media: 'screen' });
     await paperSize.selectOption('Letter');
-    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    await page.getByRole('button', { name: 'Print sheet' }).click();
     assert.equal(await page.locator('html').getAttribute('data-print-count'), '3');
     assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*Letter portrait/);
     assert.equal(await page.locator('#printSheet').innerText(), sheetText, 'paper size should not change sheet content');
     await page.emulateMedia({ media: 'print' });
     assert.equal(await page.locator('#printSheet').evaluate((el) => getComputedStyle(el).display), 'block');
-    assert.equal(await page.locator('.wrap').evaluate((el) => getComputedStyle(el).display), 'none');
+    assert.equal(await page.locator('.ws').evaluate((el) => getComputedStyle(el).display), 'none');
   });
 
   it('restores calibration data from the backup panel and persists it', async () => {
+    await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Calibrate' }).click();
     await page.getByText('Back up or restore calibration').click();
     const calibration = {
       t: { red: { hex: '#123456', str: [1.4, 1.4, 1.4] } },
