@@ -3,6 +3,14 @@ import { initBench, attachBooth } from './ui/bench.ts';
 import { initCalibration } from './ui/calibrate.ts';
 import { $, view } from './ui/store.ts';
 
+document.querySelector<HTMLButtonElement>('#lockApp')?.addEventListener('click', async () => {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } finally {
+    location.replace('/');
+  }
+});
+
 initBench(null);
 initCalibration();
 

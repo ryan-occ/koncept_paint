@@ -14,6 +14,7 @@ h3{font-size:18px;display:flex;align-items:center;gap:8px}
 h3 b{background:var(--tape);color:var(--tapeInk);border-radius:4px;padding:0 7px;font-size:15px}
 header{padding:20px max(3vw,16px) 14px;display:flex;flex-wrap:wrap;gap:6px 24px;align-items:baseline}
 header p{margin:0;color:var(--mute);max-width:62ch}
+header #lockApp{margin-left:auto;align-self:center}
 .wrap{display:grid;grid-template-columns:minmax(0,1fr) 400px;grid-template-areas:"view bench" "recipe bench" "cal cal";gap:16px;padding:0 max(3vw,16px) 32px;align-items:start}
 .view{grid-area:view;position:relative;height:min(68vh,640px);min-height:380px;border-radius:14px;overflow:hidden;background:#c9ccd0;touch-action:none}
 .view canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}

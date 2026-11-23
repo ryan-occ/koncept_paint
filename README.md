@@ -10,17 +10,19 @@ your own materials.
 
 ```bash
 npm install
-npm run dev        # local dev server
-npm test           # 20 colour, mixing, calibration, and print-sheet tests
+npm run dev        # passcode-protected Replit/local dev server
+npm test           # auth, colour, mixing, calibration, and print-sheet tests
 npm run test:replit # browser, saved-mix, and calibration-backup regression tests
 npm run build      # type-check + production build into dist/
+npm run start      # serve the built app behind the passcode gate
 ```
+
+Set `PASSCODE` to exactly six digits in Replit Secrets. `SESSION_SECRET` is used to sign
+eight-hour, HTTP-only session cookies. Build before using `npm run start`. Do not host `dist/`
+as static files: static hosting bypasses the passcode check.
 
 If Chromium is not already installed, install the browser used by the extended regression tests with
 `npx playwright install chromium`.
-
-The build uses relative paths, so `dist/` can be hosted anywhere (GitHub Pages, Netlify, a
-shop PC).
 
 Saved mixes stay in the current browser unless you export them. Use **Export saved mixes** and
 **Import backup** on the mixing bench to move recipes between browsers; an invalid backup leaves
@@ -48,6 +50,7 @@ src/
     calibrate.ts      calibration panel
   guide.ts            layer summary, application guide, recipe text
   main.ts
+server.mjs            passcode gate and authenticated app server
 tests/                node:test suites for colour maths, mixing and calibration
 ```
 
