@@ -153,7 +153,7 @@ export function initBench(b: Booth | null) {
   }));
   $<HTMLInputElement>('candy').addEventListener('input', (e) => {
     mix.cd = (e.target as HTMLInputElement).value;
-    if (!mix.cc) { mix.cc = 2; $<HTMLInputElement>('candy').closest('section')!.querySelector<HTMLInputElement>('[data-k=cc]')!.value = '2'; }
+    if (!mix.cc) { mix.cc = 2; document.querySelector<HTMLInputElement>('[data-k=cc]')!.value = '2'; }
     changed();
   });
   for (const k of ['m1', 'm2'] as const) {

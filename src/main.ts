@@ -3,6 +3,7 @@ import { initBench, attachBooth } from './ui/bench.ts';
 import { initCalibration } from './ui/calibrate.ts';
 import { initSearch } from './ui/search.ts';
 import { initPhotoMatch } from './ui/photo-match.ts';
+import { initLayout } from './ui/layout.ts';
 import { $, view } from './ui/store.ts';
 
 async function lockApp() {
@@ -72,6 +73,7 @@ initBench(null);
 initCalibration();
 initSearch();
 initPhotoMatch();
+initLayout();
 
 function startBooth() {
   void import('./render/booth.ts').then(({ Booth }) => {

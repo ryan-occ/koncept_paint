@@ -100,7 +100,6 @@ function render(r: MatchResult, c: NamedColour, finish: Finish) {
     </div></div>`;
   $('loadMatch').onclick = () => {
     if (last) loadPreset(last.mix, last.angleAnalysis);
-    $('mixName').scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 }
 

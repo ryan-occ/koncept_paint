@@ -8,42 +8,58 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-<header>
-  <h1>Paint booth simulator</h1>
-  <p>Mix toners, build the paint system coat by coat, and check it under booth light, desert sun or street lamps before you spray.</p>
-  <button class="btn ghost" id="lockApp" type="button">Lock app</button>
+<header class="appbar">
+  <div class="brand"><span>Koncept</span> Paint Booth</div>
+  <div class="current">
+    <i id="sw" class="cur-sw"></i>
+    <div class="cur-text">
+      <input id="mixName" value="Untitled mix" aria-label="Mix name">
+      <small><span id="swHex">#000000</span> · <span id="swSub">flat base colour</span></small>
+    </div>
+    <button class="btn ghost sm" id="saveBtn" type="button" title="Save mix (Ctrl+S)">Save</button>
+  </div>
+  <div class="actions">
+    <label class="batch">Batch <input id="batch" type="number" min="50" step="50" value="1000" aria-label="Batch weight in grams"> g</label>
+    <button class="btn ghost sm" id="copyBtn" type="button">Copy recipe</button>
+    <select id="printPageSize" class="sm" aria-label="Print page size"><option value="A4" selected>A4</option><option value="Letter">Letter</option></select>
+    <button class="btn sm" id="printBtn" type="button" title="Print mixing sheet (Ctrl+P)">Print sheet</button>
+    <button class="btn ghost sm" id="lockApp" type="button">Lock</button>
+  </div>
 </header>
 
-<div class="wrap">
-  <div>
-    <div class="view" id="view">
-      <canvas id="cv" aria-label="3D paint preview. Drag to rotate, scroll or pinch to zoom."></canvas>
-      <div class="fail" id="fail">The 3D preview couldn't start in this browser. The mixing bench and recipe still work.</div>
-      <div class="bar top">
-        <div class="seg" id="shapeSeg" role="group" aria-label="Preview shape"></div>
-        <div class="seg" id="lightSeg" role="group" aria-label="Lighting"></div>
-      </div>
-      <div class="bar bot">
-        <div class="swatch"><i id="sw"></i><div><div id="swHex">#000000</div><div style="opacity:.75" id="swSub">flat base colour</div></div></div>
-        <div class="seg" id="spinSeg" role="group" aria-label="Rotation"></div>
-      </div>
+<main class="ws">
+  <aside class="pane lib" aria-label="Colours and library">
+    <div class="tabs" role="tablist" data-group="lib">
+      <button role="tab" type="button" data-tab="find">Find colour</button>
+      <button role="tab" type="button" data-tab="library">Library</button>
+      <button role="tab" type="button" data-tab="photo">Photo match</button>
     </div>
-    <p class="caveat">On-screen preview only: monitors and real light vary. Always confirm with a spray-out card before the job.</p>
-  </div>
-
-  <aside class="bench" aria-label="Mixing bench">
-    <section>
-      <h2>Find a colour</h2>
-      <div class="lbl">Search by name, type a hex code, or pick any colour. The app works out a formula from your toners.</div>
+    <div class="panel" role="tabpanel" data-panel="find">
       <div class="search">
-        <input id="colorQ" type="search" placeholder="e.g. black cherry" autocomplete="off" aria-label="Search colours">
+        <input id="colorQ" type="search" placeholder="Search colours  ( / )" autocomplete="off" aria-label="Search colours">
         <input id="colorPick" type="color" value="#3a0b16" aria-label="Pick any colour">
         <select id="finishSel" aria-label="Finish"></select>
       </div>
       <div class="chips" id="colorResults"></div>
+      <div id="matchOut"></div>
+      <details class="help"><summary>About colour matching</summary><p>Search by name, type a hex code, or pick any colour; the app works out a formula from your toners. Reference colours are approximate, not OEM paint codes. For an exact factory match, use the paint code with your supplier's formula and confirm with a spray-out card.</p></details>
+    </div>
+    <div class="panel" role="tabpanel" data-panel="library" hidden>
+      <h3 class="sub">Starting points</h3>
+      <div class="chips" id="presets"></div>
+      <h3 class="sub">Saved mixes</h3>
+      <div class="chips" id="saved"></div>
+      <div class="backup-actions">
+        <button class="btn ghost" id="exportMixesBtn" type="button">Export saved mixes</button>
+        <button class="btn ghost" id="importMixesBtn" type="button">Import backup</button>
+        <input id="mixImportFile" type="file" accept=".json,application/json" hidden>
+      </div>
+      <p class="caveat" id="mixBackupMsg" role="status" aria-live="polite"></p>
+      <details class="help"><summary>About starting points</summary><p>Every starting point is mixable with the listed materials. Test on a spray-out card; follow your paint system’s TDS for binder, reducer, hardener, and application. Ratios are generic, not manufacturer formulas.</p></details>
+    </div>
+    <div class="panel" role="tabpanel" data-panel="photo" hidden>
       <div class="photo-match">
-        <h3>Match from car photos</h3>
-        <p class="lbl">Add up to six views of the same paint, then tap the same painted area in each photo. Label each view face-on, mid-angle, or grazing. Use even daylight; avoid flash and reflections. The app checks whether the selected finish's effect materials explain the shift and finds the closest available mix.</p>
+                <details class="help"><summary>How photo matching works</summary><p>Add up to six views of the same paint, then tap the same painted area in each photo. Label each view face-on, mid-angle, or grazing. Use even daylight; avoid flash and reflections. The app checks whether the selected finish's effect materials explain the shift and finds the closest available mix.</p></details>
         <label class="btn ghost photo-upload">Take or add angle photos
           <input id="photoMatchFiles" type="file" accept="image/*" capture="environment" multiple hidden>
         </label>
@@ -74,84 +90,101 @@
         <h4 class="saved-photo-heading">Saved photo comparisons</h4>
         <div id="savedPhotoMatches" class="saved-photo-matches" aria-live="polite"></div>
       </div>
-      <div id="matchOut"></div>
-      <p class="cover" style="font-size:12px">Reference colours are approximate, not OEM paint codes. For an exact factory match, use the paint code with your supplier's formula and confirm with a spray-out card.</p>
-    </section>
-    <section>
-      <h2>Mixing bench</h2>
-      <div class="lbl">Every starting point is mixable with the listed materials. Test on a spray-out card; follow your paint system’s TDS for binder, reducer, hardener, and application. Ratios are generic, not manufacturer formulas.</div>
-      <div class="chips" id="presets"></div>
-      <div class="lbl">Your saved mixes</div>
-      <div class="chips" id="saved"></div>
-      <div class="save"><input id="mixName" value="Untitled mix" aria-label="Mix name"><button class="btn ghost" id="saveBtn" type="button">Save mix</button></div>
-      <div class="backup-actions">
-        <button class="btn ghost" id="exportMixesBtn" type="button">Export saved mixes</button>
-        <button class="btn ghost" id="importMixesBtn" type="button">Import backup</button>
-        <input id="mixImportFile" type="file" accept=".json,application/json" hidden>
+    </div>
+  </aside>
+
+  <section class="stage" aria-label="3D preview">
+    <div class="view" id="view">
+      <canvas id="cv" aria-label="3D paint preview. Drag to rotate, scroll or pinch to zoom."></canvas>
+      <div class="fail" id="fail">The 3D preview couldn't start in this browser. The mixing bench and recipe still work.</div>
+      <div class="bar top">
+        <div class="seg" id="shapeSeg" role="group" aria-label="Preview shape"></div>
+        <div class="seg" id="lightSeg" role="group" aria-label="Lighting"></div>
+        <div class="seg spin" id="spinSeg" role="group" aria-label="Rotation"></div>
       </div>
-      <p class="caveat" id="mixBackupMsg" role="status" aria-live="polite"></p>
-    </section>
-    <section>
-      <h3><b>1</b>Ground coat</h3>
+    </div>
+    <p class="caveat stage-note">On-screen preview only: confirm with a spray-out card. <span class="keys">/ search · Ctrl+S save · Ctrl+P print</span></p>
+  </section>
+
+  <aside class="pane work" aria-label="Paint system">
+    <div class="tabs" role="tablist" data-group="work">
+      <button role="tab" type="button" data-tab="layers">Layers</button>
+      <button role="tab" type="button" data-tab="recipe">Recipe &amp; guide</button>
+      <button role="tab" type="button" data-tab="calibrate">Calibrate</button>
+    </div>
+    <div class="panel" role="tabpanel" data-panel="layers">
+      <div class="layer-tools"><button class="chip" type="button" id="expandAll">Expand all</button><button class="chip" type="button" id="collapseAll">Collapse all</button></div>
+      <section class="layer-sec" data-layer="1">
+        <details open>
+          <summary><b>1</b><span class="t">Ground coat</span><span class="sum" id="sum1"></span></summary>
+          <div class="layer-body">
       <div class="lbl">Primer or sealer colour under the base</div>
       <div class="seg light" id="groundSeg" role="group" aria-label="Ground colour"></div>
-    </section>
-    <section>
-      <h3><b>2</b>Base coat toners</h3>
+          </div>
+        </details>
+      </section>
+      <section class="layer-sec" data-layer="2">
+        <details open>
+          <summary><b>2</b><span class="t">Base coat toners</span><span class="sum" id="sum2"></span></summary>
+          <div class="layer-body">
       <div class="lbl">Parts by weight</div>
       <div id="toners"></div>
       <label class="f">Base coats<input type="range" min="1" max="5" step="1" data-k="bc"><output id="o_bc"></output></label>
       <div class="cover" id="cover"></div>
-    </section>
-    <section>
-      <h3><b>3</b>Flake and pearl</h3>
+          </div>
+        </details>
+      </section>
+      <section class="layer-sec" data-layer="3">
+        <details>
+          <summary><b>3</b><span class="t">Flake and pearl</span><span class="sum" id="sum3"></span></summary>
+          <div class="layer-body">
       <label class="f">Metallic flake<input type="range" min="0" max="100" data-k="fl"><output id="o_fl"></output></label>
       <div class="lbl">Flake size</div>
       <div class="seg light" id="fsSeg" role="group" aria-label="Flake size"></div>
       <div class="lbl">Pearl / colour shift (approximate)</div>
       <div class="seg light" id="pearlSeg" role="group" aria-label="Pearl type"></div>
       <label class="f">Pearl strength<input type="range" min="0" max="100" data-k="pa"><output id="o_pa"></output></label>
-    </section>
-    <section>
-      <h3><b>4</b>Mid-coat: powder in binder</h3>
-      <div class="lbl">Intercoat clear with dry pigment mixed in. Face powder shows head-on, flop powder at the edges. Interference powders pop most over a black base; over light bases they tint it the opposite colour. Brand names are examples of each product family; effect strength is approximate.</div>
+          </div>
+        </details>
+      </section>
+      <section class="layer-sec" data-layer="4">
+        <details>
+          <summary><b>4</b><span class="t">Mid-coat: powder in binder</span><span class="sum" id="sum4"></span></summary>
+          <div class="layer-body">
+      <details class="help"><summary>About mid-coats</summary><p>Intercoat clear with dry pigment mixed in. Face powder shows head-on, flop powder at the edges. Interference powders pop most over a black base; over light bases they tint it the opposite colour. Brand names are examples of each product family; effect strength is approximate.</p></details>
       <label class="f">Face powder<select id="m1" aria-label="Face powder"></select><output></output></label>
       <label class="f">Face load<input type="range" min="0" max="60" data-k="m1l"><output id="o_m1l"></output></label>
       <label class="f">Flop powder<select id="m2" aria-label="Flop powder"></select><output></output></label>
       <label class="f">Flop load<input type="range" min="0" max="60" data-k="m2l"><output id="o_m2l"></output></label>
       <label class="f">Mid-coats<input type="range" min="0" max="5" step="1" data-k="mic"><output id="o_mic"></output></label>
       <label class="f">Binder volume<input type="range" min="0.25" max="3" step="0.25" data-k="mv"><output id="o_mv"></output></label>
-    </section>
-    <section>
-      <h3><b>5</b>Candy coat</h3>
+          </div>
+        </details>
+      </section>
+      <section class="layer-sec" data-layer="5">
+        <details>
+          <summary><b>5</b><span class="t">Candy coat</span><span class="sum" id="sum5"></span></summary>
+          <div class="layer-body">
       <label class="f">Candy tint<input type="color" id="candy" aria-label="Candy tint colour"><output></output></label>
       <label class="f">Candy coats<input type="range" min="0" max="6" step="1" data-k="cc"><output id="o_cc"></output></label>
-    </section>
-    <section>
-      <h3><b>6</b>Clear coat</h3>
+          </div>
+        </details>
+      </section>
+      <section class="layer-sec" data-layer="6">
+        <details>
+          <summary><b>6</b><span class="t">Clear coat</span><span class="sum" id="sum6"></span></summary>
+          <div class="layer-body">
       <label class="f">Clear coats<input type="range" min="0" max="4" step="1" data-k="clr"><output id="o_clr"></output></label>
       <div class="lbl">Finish</div>
       <div class="seg light" id="finSeg" role="group" aria-label="Finish"></div>
       <label class="f">Orange peel<input type="range" min="0" max="100" data-k="peel"><output id="o_peel"></output></label>
-    </section>
-  </aside>
-
-  <section class="recipe" aria-label="Recipe card">
-    <div class="rhead">
-      <h2 id="rTitle">Recipe card</h2>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <label style="font-size:13px;color:var(--mute)">Batch <input id="batch" type="number" min="50" step="50" value="1000" style="width:80px;font:16px Inter;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;padding:6px"> g</label>
-        <button class="btn" id="copyBtn" type="button">Copy recipe</button>
-        <label class="page-size" for="printPageSize">Page size
-          <select id="printPageSize">
-            <option value="A4" selected>A4</option>
-            <option value="Letter">Letter</option>
-          </select>
-        </label>
-        <button class="btn ghost" id="printBtn" type="button">Print mixing sheet</button>
-      </div>
+          </div>
+        </details>
+      </section>
     </div>
-    <p class="caveat" id="printAngleNotice" role="status" aria-live="polite"></p>
+    <div class="panel recipe" role="tabpanel" data-panel="recipe" hidden>
+      <h2 id="rTitle">Recipe card</h2>
+      <p class="caveat" id="printAngleNotice" role="status" aria-live="polite"></p>
     <details class="sheet-details">
       <summary>Job details for printout (optional)</summary>
       <div class="sheet-fields">
@@ -163,16 +196,14 @@
     </details>
     <table><thead><tr><th>Toner</th><th class="n">Parts</th><th class="n">Share</th><th class="n">Weight</th></tr></thead><tbody id="rBody"></tbody></table>
     <div class="layers" id="layers"></div>
-    <h2 style="margin-top:22px">Application guide</h2>
+    <h3 class="sub">Application guide</h3>
     <div class="lbl">Booth temperature</div>
     <div class="seg light" id="tempSeg" role="group" aria-label="Booth temperature"></div>
     <ol class="guide" id="guide"></ol>
     <p class="caveat">Weights are the colour toners only. Add binder, reducer and hardener per your paint system's technical data sheet.</p>
-  </section>
-
-  <section class="recipe cal" aria-label="Calibration">
-    <h2>Calibrate with your test cards</h2>
-    <p class="caveat" style="max-width:80ch">Photograph each sprayed, cleared card flat beside a ColorChecker Classic chart, in even daylight-type light or a light box, with no flash and no glare. Click the six chart patches, then the paint. Phone photos calibrate solid colour; pearl, flake and candy effects change with angle and stay visual estimates.</p>
+    </div>
+    <div class="panel cal" role="tabpanel" data-panel="calibrate" hidden>
+      <details class="help"><summary>How calibration works</summary><p>Photograph each sprayed, cleared card flat beside a ColorChecker Classic chart, in even daylight-type light or a light box, with no flash and no glare. Click the six chart patches, then the paint. Phone photos calibrate solid colour; pearl, flake and candy effects change with angle and stay visual estimates.</p></details>
     <div class="calgrid">
       <div>
         <label class="btn ghost" style="display:inline-block">Choose photo<input type="file" accept="image/*" id="photo" hidden></label>
@@ -188,16 +219,17 @@
         <p class="caveat" id="calMsg"></p>
       </div>
     </div>
-    <h3 style="margin-top:18px">Prediction checks</h3>
+    <h3 class="sub">Prediction checks</h3>
     <table class="stack"><thead><tr><th>Mix</th><th>Predicted</th><th>Sprayed</th><th class="n">ΔE2000</th><th>Verdict</th></tr></thead><tbody id="checks"></tbody></table>
-    <h3 style="margin-top:18px">Toner calibration</h3>
+    <h3 class="sub">Toner calibration</h3>
     <table class="stack"><thead><tr><th>Toner</th><th>Masstone</th><th>Tint strength</th><th></th></tr></thead><tbody id="calStatus"></tbody></table>
     <details style="margin-top:14px"><summary>Back up or restore calibration</summary>
       <textarea id="calJson" rows="4" style="width:100%;margin-top:8px;font:13px monospace;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit"></textarea>
       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost" id="calCopy" type="button">Copy</button><button class="btn ghost" id="calLoad" type="button">Restore from text</button></div>
     </details>
-  </section>
-</div>
+    </div>
+  </aside>
+</main>
 
 <div id="printSheet" aria-hidden="true"></div>
 <script type="module" src="/src/main.ts"></script>
