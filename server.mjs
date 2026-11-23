@@ -9,6 +9,7 @@ const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const DIST = resolve(ROOT, 'dist');
 const COOKIE_NAME = 'paint_session';
 const SESSION_SECONDS = 8 * 60 * 60;
+const IDLE_TIMEOUT_MS = Number(process.env.AUTH_IDLE_TIMEOUT_MS ?? 30 * 60 * 1000);
 const RATE_WINDOW_MS = Number(process.env.AUTH_RATE_WINDOW_MS ?? 15 * 60 * 1000);
 const ADDRESS_LIMIT = 8;
 const GLOBAL_LIMIT = 80;
@@ -21,33 +22,55 @@ const databasePool = process.env.DATABASE_URL
 if (!Number.isSafeInteger(RATE_WINDOW_MS) || RATE_WINDOW_MS < 1000) {
   throw new Error('AUTH_RATE_WINDOW_MS must be an integer of at least 1000 milliseconds.');
 }
+if (!Number.isSafeInteger(IDLE_TIMEOUT_MS) || IDLE_TIMEOUT_MS < 1000 ||
+    IDLE_TIMEOUT_MS > SESSION_SECONDS * 1000) {
+  throw new Error('AUTH_IDLE_TIMEOUT_MS must be an integer between 1000 milliseconds and eight hours.');
+}
+const IDLE_TIMEOUT_TEXT = IDLE_TIMEOUT_MS < 60_000
+  ? `${Math.ceil(IDLE_TIMEOUT_MS / 1000)} seconds`
+  : IDLE_TIMEOUT_MS % 60_000 === 0
+    ? `${IDLE_TIMEOUT_MS / 60_000} minutes`
+    : `${(IDLE_TIMEOUT_MS / 60_000).toFixed(1)} minutes`;
 
 const configured = () =>
   /^\d{6}$/.test(process.env.PASSCODE ?? '') && Boolean(process.env.SESSION_SECRET);
 
-const sign = (expiresAt) =>
+const sign = (expiresAt, idleExpiresAt) =>
   createHmac('sha256', process.env.SESSION_SECRET)
-    .update(`${expiresAt}:${process.env.PASSCODE}`)
+    .update(`${expiresAt}:${idleExpiresAt}:${process.env.PASSCODE}`)
     .digest('base64url');
 
-function hasSession(request) {
-  if (!configured()) return false;
-  const cookie = request.headers.cookie?.split(';').map((part) => part.trim())
+function sessionCookie(request) {
+  return request.headers.cookie?.split(';').map((part) => part.trim())
     .find((part) => part.startsWith(`${COOKIE_NAME}=`));
+}
+
+function readSession(request) {
+  if (!configured()) return false;
+  const cookie = sessionCookie(request);
   if (!cookie) return false;
 
   const token = cookie.slice(COOKIE_NAME.length + 1);
-  const [expiryText, supplied, extra] = token.split('.');
-  const expiry = Number(expiryText);
-  if (extra !== undefined || !Number.isSafeInteger(expiry) ||
-      expiry <= Date.now() || expiry > Date.now() + SESSION_SECONDS * 1000 + 60_000) {
+  const [expiryText, idleExpiryText, supplied, extra] = token.split('.');
+  const expiresAt = Number(expiryText);
+  const idleExpiresAt = Number(idleExpiryText);
+  const now = Date.now();
+  if (extra !== undefined || !Number.isSafeInteger(expiresAt) ||
+      !Number.isSafeInteger(idleExpiresAt) || expiresAt <= now ||
+      expiresAt > now + SESSION_SECONDS * 1000 + 60_000 ||
+      idleExpiresAt <= now || idleExpiresAt > Math.min(expiresAt, now + IDLE_TIMEOUT_MS + 60_000)) {
     return false;
   }
 
-  const expectedBuffer = Buffer.from(sign(expiry), 'base64url');
+  const expectedBuffer = Buffer.from(sign(expiresAt, idleExpiresAt), 'base64url');
   const suppliedBuffer = Buffer.from(supplied ?? '', 'base64url');
-  return suppliedBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(suppliedBuffer, expectedBuffer);
+  if (suppliedBuffer.length !== expectedBuffer.length ||
+      !timingSafeEqual(suppliedBuffer, expectedBuffer)) return false;
+  return { expiresAt };
+}
+
+function hasSession(request) {
+  return Boolean(readSession(request));
 }
 
 function clientKey(request) {
@@ -140,6 +163,13 @@ function sendJson(response, status, value, headers = {}) {
   response.end(JSON.stringify(value));
 }
 
+function clearSessionCookie(request, response) {
+  const secure = process.env.NODE_ENV === 'production' ||
+    request.headers['x-forwarded-proto']?.split(',')[0].trim() === 'https';
+  response.setHeader('Set-Cookie',
+    `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT${secure ? '; Secure' : ''}`);
+}
+
 const LOGIN_PAGE = `<!doctype html>
 <html lang="en">
 <head>
@@ -166,7 +196,7 @@ const LOGIN_PAGE = `<!doctype html>
   <main>
     <h1>Paint booth simulator</h1>
     ${configured()
-      ? `<p>Enter the six-digit passcode to continue. Your session lasts up to eight hours.</p>
+      ? `<p>Enter the six-digit passcode to continue. Your session locks after ${IDLE_TIMEOUT_TEXT} without activity and expires after eight hours.</p>
          <form id="unlock">
            <label for="passcode">Passcode</label>
            <input id="passcode" name="passcode" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="current-password" required autofocus>
@@ -209,6 +239,7 @@ const LOGIN_PAGE = `<!doctype html>
 
 function sendLoginPage(request, response) {
   secureHeaders(response);
+  if (sessionCookie(request)) clearSessionCookie(request, response);
   response.setHeader(
     'Content-Security-Policy',
     "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
@@ -236,10 +267,16 @@ async function readJson(request) {
 
 function setSessionCookie(request, response) {
   const expiresAt = Date.now() + SESSION_SECONDS * 1000;
+  setActiveSessionCookie(request, response, expiresAt);
+}
+
+function setActiveSessionCookie(request, response, expiresAt) {
+  const now = Date.now();
+  const idleExpiresAt = Math.min(expiresAt, now + IDLE_TIMEOUT_MS);
   const secure = process.env.NODE_ENV === 'production' ||
     request.headers['x-forwarded-proto']?.split(',')[0].trim() === 'https';
   response.setHeader('Set-Cookie',
-    `${COOKIE_NAME}=${expiresAt}.${sign(expiresAt)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_SECONDS}${secure ? '; Secure' : ''}`);
+    `${COOKIE_NAME}=${expiresAt}.${idleExpiresAt}.${sign(expiresAt, idleExpiresAt)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.max(0, Math.ceil((idleExpiresAt - now) / 1000))}${secure ? '; Secure' : ''}`);
 }
 
 async function handleRequest(request, response, { dev, vite }) {
@@ -254,7 +291,23 @@ async function handleRequest(request, response, { dev, vite }) {
 
   if (url.pathname === '/api/auth/status' && request.method === 'GET') {
     if (!configured()) return sendJson(response, 503, { configured: false, authenticated: false });
-    return sendJson(response, 200, { configured: true, authenticated: hasSession(request) });
+    const session = readSession(request);
+    if (!session && sessionCookie(request)) clearSessionCookie(request, response);
+    return sendJson(response, 200, {
+      configured: true,
+      authenticated: Boolean(session),
+      idleTimeoutMs: IDLE_TIMEOUT_MS,
+    });
+  }
+
+  if (url.pathname === '/api/auth/activity' && request.method === 'POST') {
+    const session = readSession(request);
+    if (!session) {
+      if (sessionCookie(request)) clearSessionCookie(request, response);
+      return sendJson(response, 401, { authenticated: false });
+    }
+    setActiveSessionCookie(request, response, session.expiresAt);
+    return sendJson(response, 200, { authenticated: true });
   }
 
   if (url.pathname === '/api/auth/login' && request.method === 'POST') {
@@ -298,10 +351,7 @@ async function handleRequest(request, response, { dev, vite }) {
   }
 
   if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
-    const secure = process.env.NODE_ENV === 'production' ||
-      request.headers['x-forwarded-proto']?.split(',')[0].trim() === 'https';
-    response.setHeader('Set-Cookie',
-      `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT${secure ? '; Secure' : ''}`);
+    clearSessionCookie(request, response);
     return sendJson(response, 200, { authenticated: false });
   }
 

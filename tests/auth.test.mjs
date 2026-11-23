@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import pg from 'pg';
 
 const TEST_PASSCODE = '731024';
 const TEST_SESSION_SECRET = 'test-session-secret-that-is-not-a-real-credential';
@@ -9,14 +11,33 @@ const serverPath = fileURLToPath(new URL('../server.mjs', import.meta.url));
 const servers = [];
 let origin;
 let output = '';
+const { Pool } = pg;
 
-async function startServer({ useDatabase = true } = {}) {
+async function loginAttemptTableAvailable() {
+  if (!process.env.DATABASE_URL) return false;
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 2000, max: 1 });
+  try {
+    const { rows: [{ table_name: tableName }] } = await pool.query(
+      "SELECT to_regclass('paint_login_attempts') AS table_name",
+    );
+    return Boolean(tableName);
+  } catch {
+    return false;
+  } finally {
+    await pool.end();
+  }
+}
+
+const databaseAvailable = await loginAttemptTableAvailable();
+
+async function startServer({ useDatabase = true, idleTimeoutMs = 30 * 60 * 1000 } = {}) {
   const env = {
     ...process.env,
     NODE_ENV: 'development',
     PASSCODE: TEST_PASSCODE,
     SESSION_SECRET: TEST_SESSION_SECRET,
     AUTH_RATE_WINDOW_MS: '2500',
+    AUTH_IDLE_TIMEOUT_MS: String(idleTimeoutMs),
     PORT: '0',
   };
   if (!useDatabase) delete env.DATABASE_URL;
@@ -96,10 +117,16 @@ test('app pages and source requests show only the passcode screen before login',
 
   const status = await fetch(`${origin}/api/auth/status`);
   assert.equal(status.status, 200);
-  assert.deepEqual(await status.json(), { configured: true, authenticated: false });
+  assert.deepEqual(await status.json(), {
+    configured: true,
+    authenticated: false,
+    idleTimeoutMs: 30 * 60 * 1000,
+  });
 });
 
-test('correct passcode grants an HTTP-only session that can be locked again', async () => {
+test('correct passcode grants an HTTP-only session that can be locked again', {
+  skip: !databaseAvailable,
+}, async () => {
   const wrong = await login('000000');
   assert.equal(wrong.status, 401);
 
@@ -120,7 +147,11 @@ test('correct passcode grants an HTTP-only session that can be locked again', as
   const cookie = setCookie.split(';')[0];
 
   const status = await fetch(`${origin}/api/auth/status`, { headers: { Cookie: cookie } });
-  assert.deepEqual(await status.json(), { configured: true, authenticated: true });
+  assert.deepEqual(await status.json(), {
+    configured: true,
+    authenticated: true,
+    idleTimeoutMs: 30 * 60 * 1000,
+  });
 
   const home = await fetch(origin, { headers: { Cookie: cookie } });
   assert.match(await home.text(), /id="lockApp"/);
@@ -134,10 +165,65 @@ test('correct passcode grants an HTTP-only session that can be locked again', as
   const locked = await fetch(`${origin}/api/auth/status`, {
     headers: { Cookie: logout.headers.get('set-cookie').split(';')[0] },
   });
-  assert.deepEqual(await locked.json(), { configured: true, authenticated: false });
+  assert.deepEqual(await locked.json(), {
+    configured: true,
+    authenticated: false,
+    idleTimeoutMs: 30 * 60 * 1000,
+  });
 });
 
-test('repeated incorrect passcodes are rate-limited', async () => {
+test('idle sessions expire, while activity renews the deadline without extending the eight-hour limit', async () => {
+  const idleTimeoutMs = 1600;
+  const idleServer = await startServer({ useDatabase: false, idleTimeoutMs });
+  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+  const idleExpiresAt = Date.now() + idleTimeoutMs;
+  const signature = createHmac('sha256', TEST_SESSION_SECRET)
+    .update(`${expiresAt}:${idleExpiresAt}:${TEST_PASSCODE}`)
+    .digest('base64url');
+  let cookie = `paint_session=${expiresAt}.${idleExpiresAt}.${signature}`;
+  const initialStatus = await fetch(`${idleServer.origin}/api/auth/status`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal((await initialStatus.json()).authenticated, true);
+  assert.equal(initialStatus.headers.get('set-cookie'), null);
+
+  const initialCookieResponse = await fetch(`${idleServer.origin}/api/auth/activity`, {
+    method: 'POST',
+    headers: { Cookie: cookie },
+  });
+  assert.equal(initialCookieResponse.status, 200);
+  cookie = initialCookieResponse.headers.get('set-cookie').split(';')[0];
+  assert.match(initialCookieResponse.headers.get('set-cookie'), /Max-Age=2/);
+  assert.equal(cookie.split('=')[1].split('.')[0], String(expiresAt));
+
+  await new Promise((resolve) => setTimeout(resolve, 950));
+  const activity = await fetch(`${idleServer.origin}/api/auth/activity`, {
+    method: 'POST',
+    headers: { Cookie: cookie },
+  });
+  assert.equal(activity.status, 200);
+  cookie = activity.headers.get('set-cookie').split(';')[0];
+  assert.equal(cookie.split('=')[1].split('.')[0], String(expiresAt));
+
+  await new Promise((resolve) => setTimeout(resolve, 950));
+  const activeStatus = await fetch(`${idleServer.origin}/api/auth/status`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal((await activeStatus.json()).authenticated, true);
+
+  await new Promise((resolve) => setTimeout(resolve, 1750));
+  const expiredStatus = await fetch(`${idleServer.origin}/api/auth/status`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal((await expiredStatus.json()).authenticated, false);
+  assert.match(expiredStatus.headers.get('set-cookie'), /Max-Age=0/);
+
+  const expiredPage = await fetch(idleServer.origin, { headers: { Cookie: cookie } });
+  assert.match(await expiredPage.text(), /Enter the six-digit passcode/);
+  assert.match(expiredPage.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('repeated incorrect passcodes are rate-limited', { skip: !databaseAvailable }, async () => {
   const ip = '198.51.100.99';
   for (let i = 0; i < 8; i += 1) {
     const response = await login('000000', ip);
@@ -148,7 +234,7 @@ test('repeated incorrect passcodes are rate-limited', async () => {
   assert.ok(Number(blocked.headers.get('retry-after')) > 0);
 });
 
-test('failed-login limits are shared across server instances', async () => {
+test('failed-login limits are shared across server instances', { skip: !databaseAvailable }, async () => {
   const secondServer = await startServer();
   const ip = '198.51.100.101';
 
@@ -167,7 +253,7 @@ test('failed-login limits are shared across server instances', async () => {
   assert.equal(blocked.status, 429);
 });
 
-test('expired limits allow another attempt after the window', async () => {
+test('expired limits allow another attempt after the window', { skip: !databaseAvailable }, async () => {
   const ip = '198.51.100.102';
   for (let i = 0; i < 8; i += 1) {
     assert.equal((await login('000000', ip)).status, 401);
@@ -177,7 +263,7 @@ test('expired limits allow another attempt after the window', async () => {
   assert.equal((await login('000000', ip)).status, 401);
 });
 
-test('a successful login clears that address’s failure limit', async () => {
+test('a successful login clears that address’s failure limit', { skip: !databaseAvailable }, async () => {
   const ip = '198.51.100.103';
   for (let i = 0; i < 7; i += 1) {
     assert.equal((await login('000000', ip)).status, 401);
