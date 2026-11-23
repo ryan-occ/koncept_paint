@@ -186,6 +186,29 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('select#m1').inputValue(), 'int_red');
   });
 
+  it('matches a car colour from multiple angle photos and loads the closest mix', async () => {
+    const svg = (colour: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="120"><rect width="180" height="120" fill="${colour}"/></svg>`;
+    await page.locator('#photoMatchFiles').setInputFiles([
+      { name: 'front.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg('#8c8d8a')) },
+      { name: 'side.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg('#8c8d8a')) },
+      { name: 'glare.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg('#ffffff')) },
+    ]);
+    await page.locator('#photoAngles canvas').nth(0).waitFor();
+    assert.equal(await page.locator('#photoAngles canvas').count(), 3);
+
+    for (const canvas of await page.locator('#photoAngles canvas').all()) await canvas.click();
+    await page.getByRole('button', { name: 'Find closest available mix' }).click();
+    await page.getByRole('button', { name: 'Load into bench' }).waitFor();
+
+    const match = page.locator('#matchOut');
+    assert.match(await match.innerText(), /Photo estimate · 3 views/);
+    assert.match(await match.innerText(), /ΔE \d+\.\d/);
+    assert.match(await page.locator('#photoMatchStatus').textContent() ?? '', /Matching 3 sampled views/);
+    await page.getByRole('button', { name: 'Load into bench' }).click();
+    assert.equal(await page.locator('#mixName').inputValue(), 'Photo estimate · 3 views');
+  });
+
   it('prints the same mixing sheet on A4 or Letter paper', async () => {
     await page.evaluate(() => {
       window.print = () => {

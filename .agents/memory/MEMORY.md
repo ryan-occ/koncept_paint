@@ -1,0 +1,1 @@
+- [Photo-to-mix matching scope](photo-to-mix-matching-scope.md) — photo-based results are estimates from the current toner set, not OEM formulas.

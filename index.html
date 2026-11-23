@@ -41,6 +41,18 @@
         <select id="finishSel" aria-label="Finish"></select>
       </div>
       <div class="chips" id="colorResults"></div>
+      <div class="photo-match">
+        <h3>Match from car photos</h3>
+        <p class="lbl">Add up to six views of the same paint, then tap the same painted area in each photo. Use even daylight; avoid flash, glare, and reflections. The app combines the samples and finds its closest available mix for the selected finish.</p>
+        <label class="btn ghost photo-upload">Take or add angle photos
+          <input id="photoMatchFiles" type="file" accept="image/*" capture="environment" multiple hidden>
+        </label>
+        <div id="photoAngles" class="photo-angles"></div>
+        <div class="photo-match-actions">
+          <button class="btn" id="photoMatchBtn" type="button" disabled>Find closest available mix</button>
+        </div>
+        <p class="caveat" id="photoMatchStatus" role="status" aria-live="polite">Choose one to six photos. They stay in this browser and are not sent to a server. Photo results are estimates, not factory formulas.</p>
+      </div>
       <div id="matchOut"></div>
       <p class="cover" style="font-size:12px">Reference colours are approximate, not OEM paint codes. For an exact factory match, use the paint code with your supplier's formula and confirm with a spray-out card.</p>
     </section>

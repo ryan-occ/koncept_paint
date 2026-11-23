@@ -6,7 +6,7 @@ import { POWDERS } from '../data/powders.ts';
 import { $, cal, esc } from './store.ts';
 import { loadPreset } from './bench.ts';
 
-const FINISHES: [Finish, string][] = [['solid', 'Solid'], ['metallic', 'Metallic'], ['pearl', 'Pearl'], ['candy', 'Candy'], ['satin', 'Satin'], ['matte', 'Matte']];
+export const FINISHES: [Finish, string][] = [['solid', 'Solid'], ['metallic', 'Metallic'], ['pearl', 'Pearl'], ['candy', 'Candy'], ['satin', 'Satin'], ['matte', 'Matte']];
 let picked: NamedColour | null = null;
 let last: MatchResult | null = null;
 let job = 0;
@@ -81,4 +81,11 @@ export function initSearch() {
   });
   $('finishSel').addEventListener('change', solve);
   results(COLOURS.filter((c) => ['Black cherry', 'Candy apple red', 'British racing green', 'Midnight blue', 'Cement grey', 'Pearl white'].includes(c.name)));
+}
+
+export function matchCustomColour(hex: string, name: string) {
+  const finish = $<HTMLSelectElement>('finishSel').value as Finish;
+  picked = { name, hex, finish, tags: '' };
+  $<HTMLInputElement>('colorPick').value = hex;
+  solve();
 }
