@@ -219,6 +219,23 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.match(await page.locator('#photoMatchStatus').textContent() ?? '', /Matching 3 sampled views/);
     await page.getByRole('button', { name: 'Load into bench' }).click();
     assert.equal(await page.locator('#mixName').inputValue(), 'Photo estimate · 3 views');
+
+    await page.evaluate(() => { window.print = () => {}; });
+    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    const sheet = page.locator('#printSheet');
+    assert.equal(await sheet.locator('.ps-angle-table tbody tr').count(), 3);
+    assert.match(await sheet.innerText(), /Photo angle comparison/);
+    assert.match(await sheet.innerText(), /Observed shift .* modelled shift/);
+    assert.match(await sheet.innerText(), /Angle 1 · face/);
+    assert.equal(await page.locator('#printAngleNotice').textContent(), '');
+    assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*A4 portrait/);
+
+    const printedAngleSection = await sheet.locator('.ps-angle-analysis').innerText();
+    await page.locator('#printPageSize').selectOption('Letter');
+    await page.getByRole('button', { name: 'Print mixing sheet' }).click();
+    assert.equal(await sheet.locator('.ps-angle-table tbody tr').count(), 3);
+    assert.equal(await sheet.locator('.ps-angle-analysis').innerText(), printedAngleSection);
+    assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*Letter portrait/);
   });
 
   it('corrects a known colour cast with a neutral reference in each photo', async () => {

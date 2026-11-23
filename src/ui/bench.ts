@@ -5,6 +5,7 @@ import { finalColour, tonerHex } from '../color/mixing.ts';
 import { linearToHex } from '../color/space.ts';
 import { applicationGuide, layers, recipeText } from '../guide.ts';
 import { buildSheet, renderSheet } from '../sheet.ts';
+import type { AngleMatchAnalysis } from '../color/solve.ts';
 import { LIGHTS } from '../render/lighting-presets.ts';
 import type { Booth } from '../render/booth.ts';
 import type { Mix } from '../types.ts';
@@ -29,6 +30,22 @@ function seg<T extends object>(id: string, opts: Opt[], obj: T, key: keyof T, af
 
 let booth: Booth | null = null;
 let copyText = '';
+let printAngleAnalysis: AngleMatchAnalysis | null = null;
+let printMixFingerprint = '';
+let printCalibrationFingerprint = '';
+
+function mixFingerprint(value: Mix) {
+  const formula = structuredClone(value);
+  formula.n = '';
+  delete formula.hex;
+  return JSON.stringify(formula);
+}
+
+function currentAngleAnalysis() {
+  if (!printAngleAnalysis || mixFingerprint(mix) !== printMixFingerprint ||
+      JSON.stringify(cal.t) !== printCalibrationFingerprint) return undefined;
+  return printAngleAnalysis;
+}
 
 export function syncUI() {
   seg('shapeSeg', [['panel', 'Test panel'], ['sphere', 'Sphere'], ['car', 'Car']], view, 'shape', () => booth?.setShape(view.shape));
@@ -94,9 +111,19 @@ function drawSaved() {
     : '<span style="font-size:13px;color:var(--mute)">Nothing saved yet.</span>';
 }
 
-export function loadPreset(p: Mix) { load(p); }
+export function loadPreset(p: Mix, angleAnalysis?: AngleMatchAnalysis) {
+  load(p);
+  printAngleAnalysis = angleAnalysis ?? null;
+  printMixFingerprint = angleAnalysis ? mixFingerprint(mix) : '';
+  printCalibrationFingerprint = angleAnalysis ? JSON.stringify(cal.t) : '';
+  $('printAngleNotice').textContent = '';
+}
 
 function load(p: Mix) {
+  printAngleAnalysis = null;
+  printMixFingerprint = '';
+  printCalibrationFingerprint = '';
+  $('printAngleNotice').textContent = '';
   loadMix(p);
   $<HTMLInputElement>('mixName').value = p.n;
   syncUI();
@@ -154,7 +181,11 @@ export function initBench(b: Booth | null) {
       paintSystem: $<HTMLInputElement>('sheetPaintSystem').value,
       technician: $<HTMLInputElement>('sheetTechnician').value,
     };
-    $('printSheet').innerHTML = renderSheet(buildSheet(mix, cal, view.temp, batch, new Date(), details));
+    const angleAnalysis = currentAngleAnalysis();
+    $('printAngleNotice').textContent = printAngleAnalysis && !angleAnalysis
+      ? 'Photo angle comparison omitted because the mix or toner calibration changed after matching. Run the photo match again to print an updated comparison.'
+      : '';
+    $('printSheet').innerHTML = renderSheet(buildSheet(mix, cal, view.temp, batch, new Date(), details, angleAnalysis));
     const pageSize = $<HTMLSelectElement>('printPageSize').value;
     let pageStyle = document.getElementById('printPageStyle') as HTMLStyleElement | null;
     if (!pageStyle) {

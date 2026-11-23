@@ -38,3 +38,40 @@ test('rendered sheet escapes the mix name and includes every stage', () => {
   assert.ok(!html.includes('<42>'));
   for (const st of s.stages) assert.ok(html.includes(st.title));
 });
+
+test('rendered sheet includes escaped per-angle samples and the effect-fit summary', () => {
+  const angleAnalysis = {
+    views: [
+      { label: 'Front <panel>', angle: 'face' as const, target: '#18202a', predicted: '#202830', de: 1.7 },
+      { label: 'Grazing', angle: 'grazing' as const, target: '#35404b', predicted: '#39434d', de: 2.4 },
+    ],
+    meanDe: 2.05,
+    observedShift: 12.4,
+    predictedShift: 10.8,
+    effectFit: 'partial' as const,
+  };
+  const sheet = buildSheet(
+    preset('Cement grey solid'),
+    EMPTY_CAL,
+    'warm',
+    1000,
+    new Date('2026-11-23T00:00:00Z'),
+    {},
+    angleAnalysis,
+  );
+  const html = renderSheet(sheet);
+
+  assert.match(html, /Photo angle comparison/);
+  assert.match(html, /Front &lt;panel&gt; · face/);
+  assert.match(html, /Grazing · grazing/);
+  assert.match(html, /Observed shift 12\.4 ΔE · modelled shift 10\.8 ΔE/);
+  assert.match(html, /effect materials explain part of the observed angle shift/);
+  assert.match(html, /background:#18202a/);
+  assert.match(html, /background:#39434d/);
+  assert.equal((html.match(/class="ps-angle-swatch"/g) ?? []).length, 4);
+});
+
+test('ordinary mixing sheets omit photo angle analysis', () => {
+  const html = renderSheet(buildSheet(preset('Cement grey solid'), EMPTY_CAL, 'warm', 1000));
+  assert.doesNotMatch(html, /Photo angle comparison/);
+});

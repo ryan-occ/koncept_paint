@@ -80,7 +80,10 @@ function render(r: MatchResult, c: NamedColour, finish: Finish) {
       ${angleAnalysis}
       <button class="btn" type="button" id="loadMatch">Load into bench</button>
     </div></div>`;
-  $('loadMatch').onclick = () => { if (last) loadPreset(last.mix); $('mixName').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+  $('loadMatch').onclick = () => {
+    if (last) loadPreset(last.mix, last.angleAnalysis);
+    $('mixName').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 }
 
 export function initSearch() {

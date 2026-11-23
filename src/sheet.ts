@@ -3,6 +3,7 @@ import { POWDERS } from './data/powders.ts';
 import { finalColour, midFactor, tonerHex } from './color/mixing.ts';
 import { hexToLinear, linearToHex } from './color/space.ts';
 import { applicationGuide, type Step } from './guide.ts';
+import type { AngleMatchAnalysis } from './color/solve.ts';
 import type { BoothTemp, Calibration, Mix, RGB } from './types.ts';
 
 /** Printable mixing sheet: everything the mixing room needs, from ground coat to clear. */
@@ -29,6 +30,7 @@ export interface Sheet {
   details: Required<SheetDetails>;
   formula: FormulaRow[];
   stages: Stage[];
+  angleAnalysis?: AngleMatchAnalysis;
   guide: Step[];
   general: string[];
 }
@@ -62,6 +64,7 @@ export function buildSheet(
   batch: number,
   date = new Date(),
   details: SheetDetails = {},
+  angleAnalysis?: AngleMatchAnalysis,
 ): Sheet {
   const full = finalColour(mix, cal);
   const noMid: Mix = { ...mix, mic: 0, m1: 'none', m2: 'none', cc: 0 };
@@ -176,6 +179,7 @@ export function buildSheet(
     },
     formula: formula(mix, cal, batch),
     stages,
+    angleAnalysis,
     guide: applicationGuide(mix, full.cov, full.m, temp),
     general: [
       'Stay in one paint system from sealer to clear. Mixing brands risks lifting, poor adhesion and losing the manufacturer warranty.',
@@ -190,6 +194,27 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 export function renderSheet(s: Sheet): string {
   const patch = (bg: string, cls = 'ps-patch') => `<span class="${cls}" style="background:${bg}"></span>`;
+  const safePatch = (value: string) => /^#[\da-f]{6}$/i.test(value) ? value : '#ffffff';
+  const effectFitCopy = {
+    stable: 'The samples show little angle shift; the model is consistent across views.',
+    explains: 'The available effect materials explain the observed angle shift.',
+    partial: 'The available effect materials explain part of the observed angle shift.',
+    unexplained: 'The selected finish does not explain the observed angle shift.',
+  } as const;
+  const angleSection = s.angleAnalysis ? `<section class="ps-angle-analysis">
+    <h2>Photo angle comparison</h2>
+    <p>${effectFitCopy[s.angleAnalysis.effectFit]}</p>
+    <p class="ps-small">Observed shift ${s.angleAnalysis.observedShift.toFixed(1)} ΔE · modelled shift ${s.angleAnalysis.predictedShift.toFixed(1)} ΔE · mean per-view ΔE ${s.angleAnalysis.meanDe.toFixed(1)}</p>
+    <table class="ps-angle-table"><thead><tr><th>View</th><th>Photo sample</th><th>Model prediction</th><th class="n">ΔE</th></tr></thead><tbody>
+      ${s.angleAnalysis.views.map((v) => `<tr>
+        <td>${esc(v.label)} · ${v.angle}</td>
+        <td><span class="ps-angle-colour">${patch(safePatch(v.target), 'ps-angle-swatch')}${esc(v.target.toUpperCase())}</span></td>
+        <td><span class="ps-angle-colour">${patch(safePatch(v.predicted), 'ps-angle-swatch')}${esc(v.predicted.toUpperCase())}</span></td>
+        <td class="n">${v.de.toFixed(1)}</td>
+      </tr>`).join('')}
+    </tbody></table>
+    <p class="ps-small">Angle predictions are approximate and photo lighting can shift readings. Confirm the recipe with a physical spray-out card.</p>
+  </section>` : '';
   return `<article class="ps">
   <header class="ps-head">
     <div><h1>Paint mixing sheet</h1><p class="ps-name">${esc(s.name)}</p></div>
@@ -215,6 +240,8 @@ export function renderSheet(s: Sheet): string {
   ${s.formula.length ? `<table class="ps-formula"><thead><tr><th></th><th>Toner</th><th class="n">Parts</th><th class="n">Share</th><th class="n">Add (g)</th><th class="n">Scale reads (g)</th><th>✓</th></tr></thead><tbody>
     ${s.formula.map((r) => `<tr><td>${patch(r.swatch, 'ps-sw')}</td><td>${esc(r.name)}</td><td class="n">${+r.parts.toFixed(2)}</td><td class="n">${r.pct.toFixed(1)}%</td><td class="n">${r.grams.toFixed(1)}</td><td class="n">${r.cumulative.toFixed(1)}</td><td class="ps-box"></td></tr>`).join('')}
   </tbody></table><p class="ps-small">Add toners in this order and tick each one. "Scale reads" is the running total on a tared scale. Toners only: add binder, reducer and hardener per TDS.</p>` : '<p>No toners set.</p>'}
+
+  ${angleSection}
 
   <h2>Application guide</h2>
   <ol class="ps-guide">${s.guide.map(([a, b]) => `<li><b>${esc(a)}.</b> ${esc(b)}</li>`).join('')}</ol>
