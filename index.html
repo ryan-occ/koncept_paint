@@ -67,8 +67,12 @@
         <div id="photoAngles" class="photo-angles"></div>
         <div class="photo-match-actions">
           <button class="btn" id="photoMatchBtn" type="button" disabled>Find closest available mix</button>
+          <input id="photoMatchName" type="text" maxlength="60" aria-label="Saved comparison name" placeholder="Comparison name">
+          <button class="btn ghost" id="savePhotoMatchBtn" type="button" disabled>Save comparison</button>
         </div>
-        <p class="caveat" id="photoMatchStatus" role="status" aria-live="polite">Choose one to six photos. They stay in this browser and are not sent to a server. Photo results are estimates, not factory formulas.</p>
+        <p class="caveat" id="photoMatchStatus" role="status" aria-live="polite">Choose one to six photos. Photos and saved comparisons stay in this browser and are not sent to a server. You can save up to 10 comparisons or 100 MB total; clearing browser data removes them. Photo results are estimates, not factory formulas.</p>
+        <h4 class="saved-photo-heading">Saved photo comparisons</h4>
+        <div id="savedPhotoMatches" class="saved-photo-matches" aria-live="polite"></div>
       </div>
       <div id="matchOut"></div>
       <p class="cover" style="font-size:12px">Reference colours are approximate, not OEM paint codes. For an exact factory match, use the paint code with your supplier's formula and confirm with a spray-out card.</p>

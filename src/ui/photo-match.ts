@@ -2,7 +2,21 @@ import type { ViewAngle } from '../color/mixing.ts';
 import { correctPhotoSample, medianRgb, srgbHex } from '../color/photo.ts';
 import type { RGB } from '../types.ts';
 import { $ } from './store.ts';
-import { clearCurrentMatch, matchCustomColour } from './search.ts';
+import {
+  clearCurrentMatch,
+  currentMatchState,
+  matchCustomColour,
+  onMatchStateChange,
+  showSavedMatch,
+} from './search.ts';
+import type { CurrentMatchState } from './search.ts';
+import {
+  addSavedPhotoMatch,
+  deleteSavedPhotoMatch,
+  listSavedPhotoMatches,
+  updateSavedPhotoMatch,
+} from './photo-match-store.ts';
+import type { SavedPhotoAngle, SavedPhotoMatch } from './photo-match-store.ts';
 
 const MAX_PHOTOS = 6;
 const MAX_FILE_BYTES = 20_000_000;
@@ -20,6 +34,7 @@ interface AnglePhoto {
   height: number;
   fileBytes: number;
   fileName: string;
+  blob: Blob;
   label: string;
   angle: ViewAngle;
   sample: RGB | null;
@@ -32,6 +47,60 @@ let photos: AnglePhoto[] = [];
 let loading = false;
 let notice = '';
 let sampleMode: 'paint' | 'reference' = 'paint';
+let savedMatches: SavedPhotoMatch[] = [];
+
+function savedMatchState(record: SavedPhotoMatch): CurrentMatchState {
+  return { name: record.name, finish: record.finish, result: record.result, views: record.views };
+}
+
+function showSavedMatches() {
+  const list = $('savedPhotoMatches');
+  list.replaceChildren();
+  if (!savedMatches.length) {
+    const empty = document.createElement('span');
+    empty.className = 'photo-angle-detail';
+    empty.textContent = 'No saved comparisons yet.';
+    list.append(empty);
+    return;
+  }
+  for (const record of savedMatches) {
+    const row = document.createElement('div');
+    row.className = 'saved-photo-row';
+    row.dataset.id = record.id;
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.maxLength = 60;
+    name.value = record.name;
+    name.setAttribute('aria-label', `Name for saved comparison ${record.name}`);
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'chip';
+    open.dataset.action = 'open';
+    open.textContent = 'Open';
+    open.setAttribute('aria-label', `Open saved comparison ${record.name}`);
+    const rename = document.createElement('button');
+    rename.type = 'button';
+    rename.className = 'chip';
+    rename.dataset.action = 'rename';
+    rename.textContent = 'Rename';
+    rename.setAttribute('aria-label', `Rename saved comparison ${record.name}`);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'chip';
+    remove.dataset.action = 'delete';
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove saved comparison ${record.name}`);
+    row.append(name, open, rename, remove);
+    list.append(row);
+  }
+}
+
+function setSaveEnabled(state: CurrentMatchState | null) {
+  $<HTMLButtonElement>('savePhotoMatchBtn').disabled = !state?.views.length;
+  if (state && !$<HTMLInputElement>('photoMatchName').value.trim()) {
+    $<HTMLInputElement>('photoMatchName').value = state.name;
+  }
+}
 
 function referenceHex(): string | null {
   const target = $<HTMLSelectElement>('photoReferenceTarget').value;
@@ -205,6 +274,7 @@ function loadImage(file: File, index: number): Promise<AnglePhoto> {
         height: Math.max(1, Math.round(image.naturalHeight * scale)),
         fileBytes: file.size,
         fileName: file.name,
+        blob: file,
         label: `Angle ${index}`,
         angle: VIEW_ANGLES[(index - 1) % VIEW_ANGLES.length][0],
         sample: null,
@@ -298,6 +368,121 @@ function runMatch() {
   matchCustomColour(hex, label, views);
 }
 
+function restorePhotoReference(reference: string | null) {
+  const target = $<HTMLSelectElement>('photoReferenceTarget');
+  if (reference === '#808080') target.value = 'gray';
+  else if (reference === '#f3f3f2') target.value = 'white';
+  else if (reference) {
+    target.value = 'custom';
+    $<HTMLInputElement>('photoReferenceColor').value = reference;
+  } else target.value = 'none';
+  $('photoReferenceColorRow').hidden = target.value !== 'custom';
+}
+
+function loadSavedImage(photo: SavedPhotoAngle): Promise<AnglePhoto> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(photo.blob);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ ...photo, image });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error(`Could not reopen ${photo.fileName}. The saved image may be damaged.`));
+    };
+    image.src = url;
+  });
+}
+
+async function refreshSavedMatches() {
+  try {
+    savedMatches = await listSavedPhotoMatches();
+    showSavedMatches();
+  } catch (error) {
+    notice = error instanceof Error ? error.message : 'Could not read saved photo comparisons.';
+    updateStatus();
+  }
+}
+
+async function saveCurrentMatch() {
+  const state = currentMatchState();
+  if (!state?.views.length) return;
+  const name = $<HTMLInputElement>('photoMatchName').value.trim() || state.name;
+  const record: SavedPhotoMatch = {
+    id: crypto.randomUUID(),
+    name,
+    createdAt: Date.now(),
+    bytes: photos.reduce((sum, photo) => sum + photo.blob.size, 0),
+    reference: referenceHex(),
+    finish: state.finish,
+    result: structuredClone(state.result),
+    views: structuredClone([...state.views]),
+    photos: photos.map((photo, index): SavedPhotoAngle => ({
+      label: photo.label,
+      angle: photo.angle,
+      hex: state.views[index]?.hex ?? srgbHex(photo.sample ?? [0, 0, 0]),
+      fileName: photo.fileName,
+      fileBytes: photo.fileBytes,
+      blob: photo.blob,
+      width: photo.width,
+      height: photo.height,
+      sample: photo.sample,
+      point: photo.point,
+      referenceSample: photo.referenceSample,
+      referencePoint: photo.referencePoint,
+    })),
+  };
+  try {
+    await addSavedPhotoMatch(record);
+    notice = `Saved “${name}” on this device.`;
+    await refreshSavedMatches();
+  } catch (error) {
+    notice = error instanceof DOMException && error.name === 'QuotaExceededError'
+      ? 'Browser storage is full. This comparison was not saved and existing comparisons were kept.'
+      : error instanceof Error ? error.message : 'Could not save this comparison. Existing comparisons were kept.';
+  }
+  updateStatus();
+}
+
+async function handleSavedMatchAction(event: Event) {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
+  if (!button) return;
+  const row = button.closest<HTMLElement>('.saved-photo-row');
+  const record = savedMatches.find((match) => match.id === row?.dataset.id);
+  if (!record) return;
+  const action = button.dataset.action;
+  try {
+    if (action === 'open') {
+      const loaded = await Promise.all(record.photos.map(loadSavedImage));
+      photos = loaded;
+      restorePhotoReference(record.reference);
+      sampleMode = referenceHex() && photos.some((photo) => !photo.referenceSample) ? 'reference' : 'paint';
+      updateSampleMode();
+      renderPhotos();
+      showSavedMatch(savedMatchState(record));
+      $<HTMLInputElement>('photoMatchName').value = record.name;
+      notice = `Opened “${record.name}”.`;
+    } else if (action === 'rename') {
+      const nextName = row?.querySelector('input')?.value.trim();
+      if (!nextName) {
+        notice = 'Enter a name before renaming this comparison.';
+      } else {
+        await updateSavedPhotoMatch({ ...record, name: nextName });
+        notice = `Renamed comparison to “${nextName}”.`;
+        await refreshSavedMatches();
+      }
+    } else if (action === 'delete') {
+      await deleteSavedPhotoMatch(record.id);
+      notice = `Removed “${record.name}”.`;
+      await refreshSavedMatches();
+    }
+  } catch (error) {
+    notice = error instanceof Error ? error.message : 'Could not update this saved comparison.';
+  }
+  updateStatus();
+}
+
 export function initPhotoMatch() {
   const input = $<HTMLInputElement>('photoMatchFiles');
   input.addEventListener('change', () => {
@@ -344,7 +529,16 @@ export function initPhotoMatch() {
     updateStatus();
   });
   $('photoMatchBtn').addEventListener('click', runMatch);
+  $('savePhotoMatchBtn').addEventListener('click', () => { void saveCurrentMatch(); });
+  $('savedPhotoMatches').addEventListener('click', (event) => { void handleSavedMatchAction(event); });
+  onMatchStateChange(setSaveEnabled);
+  $<HTMLInputElement>('photoMatchName').addEventListener('input', () => {
+    const current = currentMatchState();
+    if (current) $<HTMLButtonElement>('savePhotoMatchBtn').disabled = !current.views.length;
+  });
   $('photoReferenceColorRow').hidden = true;
   updateSampleMode();
+  showSavedMatches();
+  void refreshSavedMatches();
   updateStatus();
 }

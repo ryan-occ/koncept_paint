@@ -238,6 +238,70 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.match(await page.locator('#printPageStyle').textContent() ?? '', /size:\s*Letter portrait/);
   });
 
+  it('saves, reopens, renames, and removes a photo comparison with its formula', async () => {
+    const svg = (colour: string) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="120"><rect width="180" height="120" fill="${colour}"/></svg>`;
+    await page.locator('#photoMatchFiles').setInputFiles([
+      { name: 'saved-face.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg('#8c8d8a')) },
+      { name: 'saved-side.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg('#81878d')) },
+    ]);
+    await page.locator('#photoAngles canvas').nth(0).waitFor();
+    for (const canvas of await page.locator('#photoAngles canvas').all()) await canvas.click();
+    await page.locator('#finishSel').selectOption('pearl');
+    await page.getByRole('button', { name: 'Find closest available mix' }).click();
+    await page.getByRole('button', { name: 'Load into bench' }).waitFor();
+    await page.getByLabel('Saved comparison name').fill('Workshop bonnet');
+    await page.getByRole('button', { name: 'Save comparison' }).click();
+    await page.getByRole('button', { name: 'Open saved comparison Workshop bonnet' }).waitFor();
+
+    const savedOutput = await page.locator('#matchOut').innerText();
+    const stored = await page.evaluate(async () => {
+      const request = indexedDB.open('koncept-paint-photo-matches', 1);
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const rows = await new Promise<any[]>((resolve, reject) => {
+        const read = db.transaction('comparisons', 'readonly').objectStore('comparisons').getAll();
+        read.onsuccess = () => resolve(read.result);
+        read.onerror = () => reject(read.error);
+      });
+      return rows.map((record) => ({
+        name: record.name,
+        photoCount: record.photos.length,
+        hasBlob: record.photos.every((photo: { blob: unknown }) => photo.blob instanceof Blob),
+        viewCount: record.views.length,
+        formulaName: record.result.mix.n,
+      }));
+    });
+    assert.deepEqual(stored.map((record) => [record.name, record.photoCount, record.hasBlob, record.viewCount]), [
+      ['Workshop bonnet', 2, true, 2],
+    ]);
+    assert.deepEqual(
+      await page.evaluate(() => Object.keys(localStorage).filter((key) => key.toLowerCase().includes('photo'))),
+      [],
+      'photo blobs should not be stored in localStorage',
+    );
+
+    await page.reload();
+    await page.getByRole('button', { name: 'Open saved comparison Workshop bonnet' }).waitFor();
+    await page.getByRole('button', { name: 'Open saved comparison Workshop bonnet' }).click();
+    assert.equal(await page.locator('#photoAngles canvas').count(), 2);
+    assert.equal(await page.locator('#matchOut .angle-reading').count(), 2);
+    assert.equal(
+      await page.locator('#matchOut').innerText(),
+      savedOutput.replace('Photo estimate · 2 views · pearl', 'Workshop bonnet · pearl'),
+    );
+    await page.getByRole('button', { name: 'Load into bench' }).click();
+    assert.equal(await page.locator('#mixName').inputValue(), stored[0].formulaName);
+
+    await page.getByLabel('Name for saved comparison Workshop bonnet').fill('Side panel repair');
+    await page.getByRole('button', { name: 'Rename saved comparison Workshop bonnet' }).click();
+    await page.getByRole('button', { name: 'Open saved comparison Side panel repair' }).waitFor();
+    await page.getByRole('button', { name: 'Remove saved comparison Side panel repair' }).click();
+    await page.getByText('No saved comparisons yet.').waitFor();
+  });
+
   it('corrects a known colour cast with a neutral reference in each photo', async () => {
     const srgb = (linear: number) =>
       Math.round((linear <= 0.0031308 ? linear * 12.92 : 1.055 * linear ** (1 / 2.4) - 0.055) * 255)

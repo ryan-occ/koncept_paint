@@ -7,10 +7,27 @@ import { $, cal, esc } from './store.ts';
 import { loadPreset } from './bench.ts';
 
 export const FINISHES: [Finish, string][] = [['solid', 'Solid'], ['metallic', 'Metallic'], ['pearl', 'Pearl'], ['candy', 'Candy'], ['satin', 'Satin'], ['matte', 'Matte']];
+export interface CurrentMatchState {
+  name: string;
+  finish: Finish;
+  result: MatchResult;
+  views: readonly AngleObservation[];
+}
 let picked: NamedColour | null = null;
 let last: MatchResult | null = null;
 let pickedViews: readonly AngleObservation[] | null = null;
+const matchStateListeners = new Set<(state: CurrentMatchState | null) => void>();
 let job = 0;
+
+function announceMatchState() {
+  const state = picked && last ? {
+    name: picked.name,
+    finish: picked.finish,
+    result: last,
+    views: pickedViews ?? [],
+  } : null;
+  matchStateListeners.forEach((listener) => listener(state));
+}
 
 function results(list: NamedColour[]) {
   $('colorResults').innerHTML = list.map((c, i) =>
@@ -40,6 +57,7 @@ function solve() {
       ? matchColourAcrossAngles(c.hex, finish, c.name, pickedViews, cal)
       : matchColour(c.hex, finish, c.name, cal);
     render(last, c, finish);
+    announceMatchState();
   }, 30);
 }
 
@@ -116,10 +134,32 @@ export function matchCustomColour(hex: string, name: string, views?: readonly An
   solve();
 }
 
+export function onMatchStateChange(listener: (state: CurrentMatchState | null) => void) {
+  matchStateListeners.add(listener);
+  return () => matchStateListeners.delete(listener);
+}
+
+export function currentMatchState(): CurrentMatchState | null {
+  if (!picked || !last) return null;
+  return { name: picked.name, finish: picked.finish, result: last, views: pickedViews ?? [] };
+}
+
+export function showSavedMatch(state: CurrentMatchState) {
+  job++;
+  picked = { name: state.name, hex: state.result.target, finish: state.finish, tags: '' };
+  pickedViews = state.views;
+  last = state.result;
+  $<HTMLInputElement>('colorPick').value = state.result.target;
+  $<HTMLSelectElement>('finishSel').value = state.finish;
+  render(state.result, picked, state.finish);
+  announceMatchState();
+}
+
 export function clearCurrentMatch() {
   job++;
   picked = null;
   pickedViews = null;
   last = null;
   $('matchOut').replaceChildren();
+  announceMatchState();
 }
