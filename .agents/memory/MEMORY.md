@@ -1,1 +1,2 @@
 - [Photo-to-mix matching scope](photo-to-mix-matching-scope.md) — photo-based results are estimates from the current toner set, not OEM formulas.
+- [Passcode login storage](passcode-login-storage.md) — shared rate limiting requires its PostgreSQL table to be applied; a missing table makes login fail closed.
