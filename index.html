@@ -33,6 +33,18 @@
 
   <aside class="bench" aria-label="Mixing bench">
     <section>
+      <h2>Find a colour</h2>
+      <div class="lbl">Search by name, type a hex code, or pick any colour. The app works out a formula from your toners.</div>
+      <div class="search">
+        <input id="colorQ" type="search" placeholder="e.g. black cherry" autocomplete="off" aria-label="Search colours">
+        <input id="colorPick" type="color" value="#3a0b16" aria-label="Pick any colour">
+        <select id="finishSel" aria-label="Finish"></select>
+      </div>
+      <div class="chips" id="colorResults"></div>
+      <div id="matchOut"></div>
+      <p class="cover" style="font-size:12px">Reference colours are approximate, not OEM paint codes. For an exact factory match, use the paint code with your supplier's formula and confirm with a spray-out card.</p>
+    </section>
+    <section>
       <h2>Mixing bench</h2>
       <div class="lbl">Every starting point is mixable with the listed materials. Test on a spray-out card; follow your paint system’s TDS for binder, reducer, hardener, and application. Ratios are generic, not manufacturer formulas.</div>
       <div class="chips" id="presets"></div>

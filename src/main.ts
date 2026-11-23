@@ -1,6 +1,7 @@
 import './styles.css';
 import { initBench, attachBooth } from './ui/bench.ts';
 import { initCalibration } from './ui/calibrate.ts';
+import { initSearch } from './ui/search.ts';
 import { $, view } from './ui/store.ts';
 
 async function lockApp() {
@@ -68,6 +69,7 @@ void startIdleLock();
 
 initBench(null);
 initCalibration();
+initSearch();
 
 function startBooth() {
   void import('./render/booth.ts').then(({ Booth }) => {

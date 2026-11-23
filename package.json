@@ -10,7 +10,7 @@
     "preview": "node server.mjs",
     "start": "node server.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/auth.test.mjs tests/calibration.test.ts tests/color.test.ts tests/mixing.test.ts tests/sheet.test.ts",
+    "test": "node --experimental-strip-types --test tests/auth.test.mjs tests/calibration.test.ts tests/color.test.ts tests/mixing.test.ts tests/sheet.test.ts tests/solve.test.ts",
     "test:browser": "node --experimental-strip-types --test tests/browser.test.ts",
     "test:replit": "node --experimental-strip-types --test tests/browser.test.ts tests/mix-backup.test.ts tests/calibration-backup.test.ts"
   },

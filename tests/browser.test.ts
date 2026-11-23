@@ -159,6 +159,33 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('#o_fl').textContent(), '65%');
   });
 
+  it('searches for black cherry, shows the match, and loads its formula into the bench', async () => {
+    await page.getByRole('searchbox', { name: 'Search colours' }).fill('black cherry');
+    const result = page.locator('#colorResults').getByRole('button', { name: /Black cherry/ });
+    await result.waitFor();
+    await result.click();
+    await page.getByRole('button', { name: 'Load into bench' }).waitFor();
+
+    const match = page.locator('#matchOut');
+    assert.match(await match.innerText(), /Black cherry/);
+    assert.match(await match.innerText(), /ΔE \d+\.\d/);
+    assert.deepEqual(
+      await match.locator('.pair > div').allTextContents(),
+      ['Target', 'Predicted'],
+    );
+    const swatches = await match.locator('.pair i').evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).backgroundColor),
+    );
+    assert.equal(swatches.length, 2);
+    assert.ok(swatches.every((color) => color !== 'rgba(0, 0, 0, 0)'));
+
+    await page.getByRole('button', { name: 'Load into bench' }).click();
+    assert.equal(await page.locator('#mixName').inputValue(), 'Black cherry');
+    assert.equal(await page.locator('#rTitle').textContent(), 'Black cherry');
+    assert.equal(await page.locator('#groundSeg button[aria-pressed="true"]').textContent(), 'Black sealer');
+    assert.equal(await page.locator('select#m1').inputValue(), 'int_red');
+  });
+
   it('prints the same mixing sheet on A4 or Letter paper', async () => {
     await page.evaluate(() => {
       window.print = () => {
