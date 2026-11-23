@@ -93,6 +93,8 @@ function drawSaved() {
     : '<span style="font-size:13px;color:var(--mute)">Nothing saved yet.</span>';
 }
 
+export function loadPreset(p: Mix) { load(p); }
+
 function load(p: Mix) {
   loadMix(p);
   $<HTMLInputElement>('mixName').value = p.n;

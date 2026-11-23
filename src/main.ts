@@ -2,6 +2,7 @@ import './styles.css';
 import { Booth } from './render/booth.ts';
 import { initBench } from './ui/bench.ts';
 import { initCalibration } from './ui/calibrate.ts';
+import { initSearch } from './ui/search.ts';
 import { $, view } from './ui/store.ts';
 
 let booth: Booth | null = null;
@@ -16,3 +17,4 @@ try {
 
 initBench(booth);
 initCalibration();
+initSearch();

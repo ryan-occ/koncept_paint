@@ -9,7 +9,7 @@ const mix = (n: string, t: Record<string, number>, o: Partial<Mix> = {}): Mix =>
 
 /** Starting points: sample mixes, not manufacturer formulas. */
 export const PRESETS: Mix[] = [
-  mix('Candy apple red', { white: 3, black: 1 }, { fl: 85, cd: '#b3071b', cc: 3, clr: 3, peel: 15 }),
+  mix('Candy apple red', { white: 10, black: 0.2 }, { fl: 85, cd: '#b3071b', cc: 3, clr: 3, peel: 15 }),
   mix('Pearl white tri-coat', { white: 20, yellow: 0.02 }, { g: 'white', p: 'white', pa: 70 }),
   mix('DIY flip: violet to green', { black: 10 }, { g: 'black', clr: 3, peel: 15, m1: 'int_violet', m1l: 25, m2: 'int_green', m2l: 20, mic: 3 }),
   mix('DIY flip: blue to gold', { black: 8, blue: 1 }, { g: 'black', fl: 20, clr: 3, peel: 15, m1: 'int_blue', m1l: 30, m2: 'int_gold', m2l: 20, mic: 3 }),
