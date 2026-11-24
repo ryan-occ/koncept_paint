@@ -232,7 +232,20 @@
       <section class="travel-box" aria-label="Colour travel">
         <h3 class="sub">Colour travel by viewing angle</h3>
         <div id="travel"></div>
-        <p class="cover" style="font-size:12px">Simulated from this paint system. For a licensing or spec document, spray a panel and record measured values. <button class="chip" id="travelCopy" type="button">Copy colour spec</button></p>
+        <div class="travel-meta">
+          <p id="travelSource" role="status" aria-live="polite"></p>
+          <button class="chip" id="travelCopy" type="button">Copy colour spec</button>
+        </div>
+        <details class="travel-measure">
+          <summary>Enter measured spray-out readings</summary>
+          <p class="ps-small">Enter D65 CIELAB values from a measured spray-out at each angle. Use the same instrument settings for all five readings. Saved measurements apply to this formula in this browser.</p>
+          <div id="travelInputs"></div>
+          <div class="travel-measure-actions">
+            <button class="chip" id="travelSave" type="button">Save measured readings</button>
+            <button class="chip" id="travelClear" type="button" disabled>Clear saved readings</button>
+          </div>
+          <p id="travelMeasureStatus" class="ps-small" role="status" aria-live="polite"></p>
+        </details>
       </section>
     <h3 class="sub">Application guide</h3>
     <div class="lbl">Booth temperature</div>

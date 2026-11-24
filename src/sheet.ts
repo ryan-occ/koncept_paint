@@ -4,6 +4,7 @@ import { finalColour, midFactor, tonerHex } from './color/mixing.ts';
 import { hexToLinear, linearToHex } from './color/space.ts';
 import { applicationGuide, type Step } from './guide.ts';
 import type { AngleMatchAnalysis } from './color/solve.ts';
+import { describe, type TravelSpecification } from './color/travel.ts';
 import type { BoothTemp, Calibration, Mix, RGB } from './types.ts';
 
 /** Printable mixing sheet: everything the mixing room needs, from ground coat to clear. */
@@ -191,6 +192,25 @@ export function buildSheet(
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Printable colour-travel section, with an explicit measurement source. */
+export function renderTravelSection(data: TravelSpecification): string {
+  const measured = data.source === 'measured';
+  const source = measured ? 'Measured spray-out readings' : 'Simulated estimate';
+  const savedDate = data.savedAt && Number.isFinite(Date.parse(data.savedAt))
+    ? new Date(data.savedAt).toISOString().slice(0, 10)
+    : '';
+  const provenance = measured
+    ? `Recorded${savedDate ? ` ${savedDate}` : ''}. D65 CIELAB values are the saved measurements; sRGB patches are approximate screen/print previews.`
+    : 'Modelled from this paint system, not measured. Confirm with a physical spray-out before using for licensing.';
+  return `<section class="ps-travel-spec">
+    <h2>Colour travel by viewing angle</h2>
+    <p class="ps-small"><b>Data source:</b> ${source}${measured && savedDate ? ` · ${savedDate}` : ''}</p>
+    <div class="ps-travel">${data.points.map((p) => `<div><i style="background:${p.hex}"></i><b>${p.angle}°</b><span>${p.hex.toUpperCase()}</span><small>${p.lab.map((v) => v.toFixed(1)).join(' / ')}</small><small>${esc(describe(p.lab))}</small></div>`).join('')}</div>
+    <p>${esc(data.summary.text)}</p>
+    <p class="ps-small">${provenance} Angles are degrees from the specular reflection (15° highlight, 45° face, 110° flop).</p>
+  </section>`;
+}
 
 export function renderSheet(s: Sheet): string {
   const patch = (bg: string, cls = 'ps-patch') => `<span class="${cls}" style="background:${bg}"></span>`;

@@ -415,6 +415,60 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('.ws').evaluate((el) => getComputedStyle(el).display), 'none');
   });
 
+  it('saves measured five-angle readings for a formula and uses them in copy and print', async () => {
+    await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Recipe & guide' }).click();
+    assert.match(await page.locator('#travelSource').textContent() ?? '', /Simulated estimate/);
+    await page.locator('.travel-measure summary').click();
+
+    const readings = [
+      [45, 34, 20],
+      [48, 22, 12],
+      [51, 5, 2],
+      [44, -12, -7],
+      [36, -28, -17],
+    ];
+    const angles = [15, 25, 45, 75, 110];
+    for (const [index, angle] of angles.entries()) {
+      for (const [axisIndex, axis] of ['L', 'a', 'b'].entries()) {
+        await page.locator(`#travel${angle}${axis}`).fill(String(readings[index][axisIndex]));
+      }
+    }
+
+    await page.getByRole('button', { name: 'Save measured readings' }).click();
+    await page.waitForFunction(() => document.querySelector('#travelSource')?.textContent?.includes('Measured spray-out readings'));
+    assert.match(await page.locator('#travelMeasureStatus').textContent() ?? '', /used for this formula/);
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (text: string) => { (window as any).__copiedTravel = text; } },
+      });
+    });
+    await page.getByRole('button', { name: 'Copy colour spec' }).click();
+    const copied = await page.evaluate(() => (window as any).__copiedTravel as string);
+    assert.match(copied, /Measured spray-out readings/);
+    assert.match(copied, /D65 CIELAB readings/);
+    assert.match(copied, /15°: #[\da-f]{6}  L\*45\.0 a\*34\.0 b\*20\.0/i);
+
+    await page.evaluate(() => { window.print = () => {}; });
+    await page.getByRole('button', { name: 'Print sheet' }).click();
+    const printed = await page.locator('#printSheet').innerText();
+    assert.match(printed, /Data source: Measured spray-out readings/);
+    assert.match(printed, /D65 CIELAB values are the saved measurements/);
+    assert.match(printed, /45\.0 \/ 34\.0 \/ 20\.0/);
+    assert.equal(await page.locator('#printSheet .ps-travel-spec .ps-travel > div').count(), 5);
+
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#swHex')?.textContent !== '#000000');
+    await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Recipe & guide' }).click();
+    await page.waitForFunction(() => document.querySelector('#travelSource')?.textContent?.includes('Measured spray-out readings'));
+    assert.equal(await page.locator('#travel45L').inputValue(), '51.0');
+    await page.locator('.travel-measure summary').click();
+    await page.locator('#travelClear').click();
+    assert.match(await page.locator('#travelSource').textContent() ?? '', /Simulated estimate/);
+    assert.equal(await page.locator('#travelClear').isDisabled(), true);
+  });
+
   it('restores calibration data from the backup panel and persists it', async () => {
     await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Calibrate' }).click();
     await page.getByText('Back up or restore calibration').click();

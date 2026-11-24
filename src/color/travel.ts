@@ -1,7 +1,7 @@
 import { POWDERS } from '../data/powders.ts';
 import type { Calibration, Mix, RGB } from '../types.ts';
 import { EMPTY_CAL, finalColour, midFactor } from './mixing.ts';
-import { deltaE, hexToLinear, linearToHex, toLab } from './space.ts';
+import { deltaE2000, hexToLinear, linearToHex, toLab } from './space.ts';
 
 /**
  * Colour travel: how the finish looks at the standard multi-angle measuring geometries
@@ -18,8 +18,54 @@ const FLOP_W = [0, 0.05, 0.15, 0.35, 0.5];
 const PEARL_COLOUR: Record<string, string> = { white: '#e8e8ea', gold: '#d9a43a', blue: '#3d7bf5' };
 
 export interface TravelPoint { angle: number; rgb: RGB; hex: string; lab: RGB }
+export type TravelSource = 'measured' | 'simulated';
+export interface TravelSpecification {
+  source: TravelSource;
+  savedAt?: string;
+  points: TravelPoint[];
+  summary: { text: string; de: number; effect: boolean };
+}
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
+
+/** Validate five CIELAB readings in the standard 15°, 25°, 45°, 75°, 110° order. */
+export function parseMeasuredReadings(value: unknown): RGB[] | null {
+  if (!Array.isArray(value) || value.length !== ANGLES.length) return null;
+  const readings: RGB[] = [];
+  for (const raw of value) {
+    if (!Array.isArray(raw) || raw.length !== 3 ||
+      !raw.every((n) => typeof n === 'number' && Number.isFinite(n))) return null;
+    const [L, a, b] = raw as number[];
+    if (L < 0 || L > 100 || a < -128 || a > 127 || b < -128 || b > 127) return null;
+    readings.push([L, a, b]);
+  }
+  return readings;
+}
+
+/** Convert D65 CIELAB to linear sRGB for an approximate screen/print swatch. */
+export function labToLinear([L, a, b]: readonly number[]): RGB {
+  const fy = (L + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - b / 200;
+  const finv = (t: number) => t ** 3 > 0.008856 ? t ** 3 : (t - 16 / 116) / 7.787;
+  const X = 0.95047 * finv(fx), Y = finv(fy), Z = 1.08883 * finv(fz);
+  return [
+    3.2406 * X - 1.5372 * Y - 0.4986 * Z,
+    -0.9689 * X + 1.8758 * Y + 0.0415 * Z,
+    0.0557 * X - 0.204 * Y + 1.057 * Z,
+  ];
+}
+
+/** Build measured points while preserving the instrument's Lab values exactly. */
+export function measuredTravel(readings: readonly RGB[]): TravelPoint[] | null {
+  const valid = parseMeasuredReadings(readings);
+  if (!valid) return null;
+  return ANGLES.map((angle, i) => {
+    const lab = valid[i];
+    const rgb = labToLinear(lab);
+    return { angle, rgb, hex: linearToHex(rgb), lab };
+  });
+}
 
 export function colourTravel(mix: Mix, cal: Calibration = EMPTY_CAL): TravelPoint[] {
   const base = finalColour(mix, cal).rgb;
@@ -74,7 +120,7 @@ export function describe([L, a, b]: readonly number[]): string {
 /** One-line summary of the shift, for the recipe card, print sheet and licensing notes. */
 export function travelSummary(points: TravelPoint[]): { text: string; de: number; effect: boolean } {
   const hi = points[0], face = points[2], flop = points[points.length - 1];
-  const de = deltaE(hi.rgb, flop.rgb);
+  const de = deltaE2000(hi.lab, flop.lab);
   const effect = de >= 5;
   const text = effect
     ? `Shifts from ${hi.hex.toUpperCase()} (${describe(hi.lab)}, highlight 15°) through ${face.hex.toUpperCase()} (${describe(face.lab)}, face 45°) to ${flop.hex.toUpperCase()} (${describe(flop.lab)}, flop 110°). Travel ΔE ${de.toFixed(1)}.`

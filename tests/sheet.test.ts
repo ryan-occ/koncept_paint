@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSheet, formula, renderSheet } from '../src/sheet.ts';
+import { buildSheet, formula, renderSheet, renderTravelSection } from '../src/sheet.ts';
+import { colourTravel, measuredTravel, travelSummary } from '../src/color/travel.ts';
 import { PRESETS } from '../src/data/presets.ts';
 import { EMPTY_CAL } from '../src/color/mixing.ts';
 
@@ -74,4 +75,30 @@ test('rendered sheet includes escaped per-angle samples and the effect-fit summa
 test('ordinary mixing sheets omit photo angle analysis', () => {
   const html = renderSheet(buildSheet(preset('Cement grey solid'), EMPTY_CAL, 'warm', 1000));
   assert.doesNotMatch(html, /Photo angle comparison/);
+});
+
+test('print travel section distinguishes measured readings from simulated estimates', () => {
+  const measuredPoints = measuredTravel([
+    [46, 38, 22], [49, 25, 14], [52, 5, 3], [45, -13, -8], [37, -28, -17],
+  ])!;
+  const measuredHtml = renderTravelSection({
+    source: 'measured',
+    savedAt: '2026-11-24T12:00:00.000Z',
+    points: measuredPoints,
+    summary: travelSummary(measuredPoints),
+  });
+  assert.match(measuredHtml, /Data source:<\/b> Measured spray-out readings/);
+  assert.match(measuredHtml, /Recorded 2026-11-24/);
+  assert.match(measuredHtml, /D65 CIELAB values are the saved measurements/);
+  assert.match(measuredHtml, /46\.0 \/ 38\.0 \/ 22\.0/);
+  assert.equal((measuredHtml.match(/<b>\d+°<\/b>/g) ?? []).length, 5);
+
+  const simulatedPoints = colourTravel(preset('Cement grey solid'));
+  const simulatedHtml = renderTravelSection({
+    source: 'simulated',
+    points: simulatedPoints,
+    summary: travelSummary(simulatedPoints),
+  });
+  assert.match(simulatedHtml, /Data source:<\/b> Simulated estimate/);
+  assert.match(simulatedHtml, /not measured/);
 });

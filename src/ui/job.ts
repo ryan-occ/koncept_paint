@@ -1,8 +1,9 @@
 import { CARS } from '../data/cars.ts';
 import { DEFAULT_SPECS, LAYER_NAMES, SCOPES, VEHICLES, estimateUsage, type JobSettings, type LayerKey, type Usage } from '../usage.ts';
-import { colourTravel, describe, travelSummary, type TravelPoint } from '../color/travel.ts';
-import type { Calibration, Mix } from '../types.ts';
-import { $, changed, esc, storage, view } from './store.ts';
+import { ANGLES, colourTravel, describe, measuredTravel, parseMeasuredReadings, travelSummary, type TravelPoint, type TravelSpecification } from '../color/travel.ts';
+import type { Calibration, Mix, RGB } from '../types.ts';
+import { $, changed, esc, mix, storage, view } from './store.ts';
+import { renderTravelSection } from '../sheet.ts';
 
 /**
  * Job size and paint quantities (Recipe tab), automatic batch weight, and colour travel.
@@ -44,6 +45,34 @@ export function jobSettings(): JobSettings {
 
 const f2 = (n: number) => (n < 0.005 ? '—' : n.toFixed(2));
 
+interface SavedTravel { readings: RGB[]; savedAt: string }
+const TRAVEL_KEY = 'pbs-travel-readings';
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+function readSavedTravel(): Record<string, SavedTravel> {
+  const raw = storage.get<unknown>(TRAVEL_KEY, {});
+  if (!isRecord(raw)) return {};
+  const valid: Record<string, SavedTravel> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isRecord(value) || typeof value.savedAt !== 'string' || !Number.isFinite(Date.parse(value.savedAt))) continue;
+    const readings = parseMeasuredReadings(value.readings);
+    if (readings) valid[key] = { readings, savedAt: value.savedAt };
+  }
+  return valid;
+}
+
+const savedTravel = readSavedTravel();
+const formulaKey = (mix: Mix) => {
+  const formula = structuredClone(mix);
+  formula.n = '';
+  delete formula.hex;
+  formula.mv = 0;
+  return JSON.stringify(formula);
+};
+let travelInputKey = '';
+let travelDirty = false;
+
 /**
  * Called at the start of every recipe update: sizes the batch and mid-coat binder to the job
  * when auto batch is on, and returns the usage for display and printing.
@@ -81,17 +110,52 @@ function travelStrip(points: TravelPoint[], cls: string) {
 }
 
 let travelText = '';
+export function travelSpecification(mix: Mix, cal: Calibration): TravelSpecification {
+  const saved = savedTravel[formulaKey(mix)];
+  const measured = saved ? measuredTravel(saved.readings) : null;
+  const points = measured ?? colourTravel(mix, cal);
+  return {
+    source: measured ? 'measured' : 'simulated',
+    ...(measured && saved ? { savedAt: saved.savedAt } : {}),
+    points,
+    summary: travelSummary(points),
+  };
+}
+
+function syncTravelInputs(mix: Mix) {
+  const key = formulaKey(mix);
+  const saved = savedTravel[key];
+  if (travelInputKey !== key) {
+    travelInputKey = key;
+    travelDirty = false;
+    for (const [index, angle] of ANGLES.entries()) {
+      const reading = saved?.readings[index];
+      for (const [axisIndex, axis] of ['L', 'a', 'b'].entries()) {
+        $<HTMLInputElement>(`travel${angle}${axis}`).value = reading ? reading[axisIndex].toFixed(1) : '';
+      }
+    }
+  }
+  $('travelClear').toggleAttribute('disabled', !saved);
+  $('travelMeasureStatus').textContent = travelDirty
+    ? 'Unsaved edits. Save all five angle readings to use them in the spec.'
+    : saved
+      ? `Measured readings saved ${saved.savedAt.slice(0, 10)} and used for this formula.`
+      : 'No measured readings saved for this formula; the strip uses a simulated estimate.';
+}
+
 export function renderTravel(mix: Mix, cal: Calibration) {
-  const pts = colourTravel(mix, cal), s = travelSummary(pts);
-  $('travel').innerHTML = `${travelStrip(pts, 'travel-strip')}<p class="cover">${esc(s.text)}</p>`;
-  travelText = `${mix.n} — colour travel (simulated, confirm by measuring a sprayed panel)\n` +
-    pts.map((p) => `${p.angle}°: ${p.hex.toUpperCase()}  L*${p.lab[0].toFixed(1)} a*${p.lab[1].toFixed(1)} b*${p.lab[2].toFixed(1)}  ${describe(p.lab)}`).join('\n') + `\n${s.text}`;
+  syncTravelInputs(mix);
+  const spec = travelSpecification(mix, cal);
+  const source = spec.source === 'measured' ? 'Measured spray-out readings' : 'Simulated estimate';
+  $('travel').innerHTML = `${travelStrip(spec.points, 'travel-strip')}<p class="cover">${esc(spec.summary.text)}</p>`;
+  $('travelSource').textContent = `Source: ${source}${spec.source === 'measured' ? ' · D65 CIELAB' : ''}${spec.savedAt ? ` · saved ${spec.savedAt.slice(0, 10)}` : ''}`;
+  travelText = `${mix.n} — colour travel (${source})\n` +
+    (spec.savedAt ? `Measured spray-out saved ${spec.savedAt.slice(0, 10)}. D65 CIELAB readings; sRGB swatches are display approximations.\n` : 'Simulated from this paint system, not measured. Confirm a sprayed panel before licensing.\n') +
+    spec.points.map((p) => `${p.angle}°: ${p.hex.toUpperCase()}  L*${p.lab[0].toFixed(1)} a*${p.lab[1].toFixed(1)} b*${p.lab[2].toFixed(1)}  ${describe(p.lab)}`).join('\n') + `\n${spec.summary.text}`;
 }
 
 export function travelHtml(mix: Mix, cal: Calibration): string {
-  const pts = colourTravel(mix, cal);
-  return `<h2>Colour travel by viewing angle</h2>${travelStrip(pts, 'ps-travel')}<p>${esc(travelSummary(pts).text)}</p>
-  <p class="ps-small">Angles are degrees from the specular reflection (15° highlight, 45° face, 110° flop), as used by multi-angle spectrophotometers. Values are simulated from this paint system; for a licensing or specification document, measure a sprayed panel and record those readings.</p>`;
+  return renderTravelSection(travelSpecification(mix, cal));
 }
 
 function specRows() {
@@ -118,6 +182,9 @@ export function initJob() {
   };
   sync();
   specRows();
+  $('travelInputs').innerHTML = `<table class="travel-entry"><thead><tr><th>Angle</th><th>L*</th><th>a*</th><th>b*</th></tr></thead><tbody>${ANGLES.map((angle) =>
+    `<tr><th scope="row">${angle}°</th>${['L', 'a', 'b'].map((axis) => `<td><input id="travel${angle}${axis}" type="number" step="0.1" ${axis === 'L' ? 'min="0" max="100"' : 'min="-128" max="127"'} inputmode="decimal" aria-label="${angle} degrees ${axis} star"></td>`).join('')}</tr>`,
+  ).join('')}</tbody></table>`;
   const set = (fn: () => void) => { fn(); save(); sync(); changed(); };
   $('jobVehicle').addEventListener('change', (e) => set(() => { prefs.vehicle = (e.target as HTMLSelectElement).value; }));
   $('jobScope').addEventListener('change', (e) => set(() => { prefs.scope = (e.target as HTMLSelectElement).value; }));
@@ -140,6 +207,40 @@ export function initJob() {
   // Batch: Auto sizes it from the job; typing a weight switches Auto off.
   $('batchAuto').addEventListener('click', () => { prefs.autoBatch = !prefs.autoBatch; save(); changed(); });
   $('batch').addEventListener('input', () => { if (prefs.autoBatch) { prefs.autoBatch = false; save(); $('batchAuto').setAttribute('aria-pressed', 'false'); } });
+  $('travelInputs').addEventListener('input', () => {
+    travelDirty = true;
+    $('travelMeasureStatus').textContent = 'Unsaved edits. Save all five angle readings to use them in the spec.';
+  });
+  $('travelSave').addEventListener('click', () => {
+    const raw = ANGLES.map((angle) => ['L', 'a', 'b'].map((axis) => {
+      const value = $<HTMLInputElement>(`travel${angle}${axis}`).value.trim();
+      return value ? Number(value) : Number.NaN;
+    }));
+    const readings = parseMeasuredReadings(raw);
+    if (!readings) {
+      $('travelMeasureStatus').textContent = 'Enter all 15 values: L* from 0 to 100, a* and b* from −128 to 127.';
+      return;
+    }
+    const key = formulaKey(mix);
+    savedTravel[key] = { readings, savedAt: new Date().toISOString() };
+    const latest = Object.entries(savedTravel)
+      .sort((a, b) => b[1].savedAt.localeCompare(a[1].savedAt))
+      .slice(0, 100);
+    for (const keyToRemove of Object.keys(savedTravel)) delete savedTravel[keyToRemove];
+    Object.assign(savedTravel, Object.fromEntries(latest));
+    storage.set(TRAVEL_KEY, savedTravel);
+    travelDirty = false;
+    travelInputKey = key;
+    changed();
+  });
+  $('travelClear').addEventListener('click', () => {
+    const key = formulaKey(mix);
+    delete savedTravel[key];
+    storage.set(TRAVEL_KEY, savedTravel);
+    travelDirty = false;
+    travelInputKey = '';
+    changed();
+  });
   $('travelCopy').addEventListener('click', async () => {
     const b = $('travelCopy');
     try { await navigator.clipboard.writeText(travelText); b.textContent = 'Copied'; } catch { b.textContent = 'Copy blocked'; }

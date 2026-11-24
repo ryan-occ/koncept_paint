@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_SPECS, estimateUsage, rtsLitres, type JobSettings } from '../src/usage.ts';
-import { colourTravel, describe, travelSummary } from '../src/color/travel.ts';
+import { colourTravel, describe, labToLinear, measuredTravel, parseMeasuredReadings, travelSummary } from '../src/color/travel.ts';
 import { PRESETS } from '../src/data/presets.ts';
 import { hexToLinear, toLab } from '../src/color/space.ts';
 
@@ -52,6 +52,33 @@ test('solid colours barely travel; flip and metallic finishes travel clearly', (
   assert.match(flip.text, /highlight 15°.*face 45°.*flop 110°/);
   const metallic = colourTravel(preset('Teal metallic'));
   assert.ok(metallic[0].lab[0] > metallic[4].lab[0] + 10, 'metallic highlight is lighter than flop');
+});
+
+test('measured travel keeps five validated CIELAB readings and creates preview swatches', () => {
+  const readings = [
+    [46.2, 38.1, 22.4],
+    [48.8, 25.2, 14.5],
+    [52.1, 5.5, 3.2],
+    [44.6, -13.4, -8.1],
+    [36.7, -28.2, -16.9],
+  ];
+  const parsed = parseMeasuredReadings(readings);
+  assert.deepEqual(parsed, readings);
+  const points = measuredTravel(parsed!);
+  assert.deepEqual(points?.map((point) => point.angle), [15, 25, 45, 75, 110]);
+  assert.deepEqual(points?.map((point) => point.lab), readings);
+  assert.ok(points?.every((point) => /^#[\da-f]{6}$/i.test(point.hex)));
+  assert.ok(travelSummary(points!).de > 5);
+
+  const neutral = labToLinear([50, 0, 0]);
+  assert.ok(neutral.every((channel) => channel > 0.15 && channel < 0.25));
+});
+
+test('measured travel rejects missing, non-finite, and out-of-range readings', () => {
+  assert.equal(parseMeasuredReadings([[50, 0, 0]]), null);
+  assert.equal(parseMeasuredReadings(Array.from({ length: 5 }, () => [50, 0, Number.NaN])), null);
+  assert.equal(parseMeasuredReadings(Array.from({ length: 5 }, () => [101, 0, 0])), null);
+  assert.equal(parseMeasuredReadings(Array.from({ length: 5 }, () => [50, 128, 0])), null);
 });
 
 test('colour descriptions', () => {

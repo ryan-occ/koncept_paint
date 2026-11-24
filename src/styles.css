@@ -170,6 +170,20 @@ h3.sub{font-size:16px;margin:16px 0 6px;color:var(--ink)}
 .travel-strip b{font-size:12px}
 .travel-strip small,.ps-travel small{color:var(--mute);font-size:10px}
 .ps-travel i{height:14mm;border-color:#999}
+.travel-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0}
+.travel-meta p{margin:0;font-size:12px;color:var(--mute)}
+.travel-measure{margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px}
+.travel-measure summary{cursor:pointer;font-size:13px;font-weight:600}
+.travel-measure>p{margin:6px 0}
+.travel-entry{width:100%;table-layout:fixed;margin:6px 0}
+.travel-entry th,.travel-entry td{padding:4px 3px;font-size:11px;text-align:center}
+.travel-entry th:first-child{width:52px;white-space:nowrap}
+.travel-entry input{box-sizing:border-box;width:100%;min-width:0;padding:5px 2px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:13px Inter,sans-serif;text-align:center}
+.travel-measure-actions{display:flex;flex-wrap:wrap;gap:6px}
+.travel-measure-actions button:disabled{opacity:.5;cursor:not-allowed}
+#travelMeasureStatus{min-height:1.3em}
+.ps-travel-spec{break-inside:avoid-page}
+.ps-travel-spec .ps-travel{margin:8px 0}
 
 /* wide: three panes, no page scroll */
 @media(min-width:1200px){
