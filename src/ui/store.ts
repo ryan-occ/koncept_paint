@@ -18,7 +18,7 @@ export const storage = {
   },
 };
 
-export interface ViewState { shape: ShapeId; light: LightId; spin: 'on' | 'off'; temp: BoothTemp; hasCar?: boolean }
+export interface ViewState { shape: ShapeId; light: LightId; spin: 'on' | 'off'; temp: BoothTemp; hasCar?: boolean; carId?: string }
 
 export const view: ViewState = { shape: 'panel', light: 'booth', spin: 'on', temp: 'warm' };
 export const mix: Mix = { ...structuredClone(PRESETS[0]) };

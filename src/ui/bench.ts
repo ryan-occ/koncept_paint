@@ -5,6 +5,7 @@ import { finalColour, tonerHex } from '../color/mixing.ts';
 import { linearToHex } from '../color/space.ts';
 import { applicationGuide, layers, recipeText } from '../guide.ts';
 import { buildSheet, renderSheet } from '../sheet.ts';
+import { applyJob, renderTravel, travelHtml, usageHtml } from './job.ts';
 import type { AngleMatchAnalysis } from '../color/solve.ts';
 import { LIGHTS } from '../render/lighting-presets.ts';
 import type { Booth } from '../render/booth.ts';
@@ -91,6 +92,8 @@ function update() {
   for (const x of TONERS) { const e = $('pc_' + x.id); if (e) e.textContent = mix.t[x.id] > 0 && m.tot ? Math.round((mix.t[x.id] / m.tot) * 100) + '%' : ''; }
 
   mix.n = $<HTMLInputElement>('mixName').value || 'Untitled mix';
+  applyJob(mix);
+  renderTravel(mix, cal);
   const batch = Math.max(0, +$<HTMLInputElement>('batch').value || 0);
   $('rTitle').textContent = mix.n;
   $('rBody').innerHTML = used.length ? used.map((x) => {
@@ -185,7 +188,10 @@ export function initBench(b: Booth | null) {
     $('printAngleNotice').textContent = printAngleAnalysis && !angleAnalysis
       ? 'Photo angle comparison omitted because the mix or toner calibration changed after matching. Run the photo match again to print an updated comparison.'
       : '';
-    $('printSheet').innerHTML = renderSheet(buildSheet(mix, cal, view.temp, batch, new Date(), details, angleAnalysis));
+    const sheetHtml = renderSheet(buildSheet(mix, cal, view.temp, batch, new Date(), details, angleAnalysis));
+    // Job quantities and colour travel go before the application guide.
+    const extra = usageHtml(applyJob(mix)) + travelHtml(mix, cal);
+    $('printSheet').innerHTML = sheetHtml.includes('<h2>Application guide</h2>') ? sheetHtml.replace('<h2>Application guide</h2>', extra + '<h2>Application guide</h2>') : sheetHtml + extra;
     const pageSize = $<HTMLSelectElement>('printPageSize').value;
     let pageStyle = document.getElementById('printPageStyle') as HTMLStyleElement | null;
     if (!pageStyle) {
