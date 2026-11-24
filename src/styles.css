@@ -159,6 +159,9 @@ h3.sub{font-size:16px;margin:16px 0 6px;color:var(--ink)}
 .job-grid [hidden]{display:none}
 .job-grid label{display:grid;gap:3px;font-size:12px;color:var(--mute)}
 .job-grid select,.job-grid input,.spec input{font:14px Inter,sans-serif;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--ink);width:100%}
+.paint-profile{align-items:end}
+.paint-profile .profile-actions{display:flex;flex-wrap:wrap;gap:6px}
+.paint-profile button:disabled{opacity:.5;cursor:not-allowed}
 .usage,.spec{font-size:13px;margin-top:6px}
 .usage td,.usage th,.spec td,.spec th{padding:5px 6px}
 .usage small{color:var(--mute)}

@@ -17,13 +17,45 @@ interface JobPrefs {
   density: number;
   autoBatch: boolean;
   specs: Record<LayerKey, { dft: number; vs: number; ratio: [number, number, number] }>;
+  profiles: PaintProfile[];
+  activeProfile: string | null;
+}
+interface PaintProfile {
+  id: string;
+  name: string;
+  te: number;
+  density: number;
+  specs: Record<LayerKey, { dft: number; vs: number; ratio: [number, number, number] }>;
 }
 const KEY = 'pbs-job';
 const stored = storage.get<Partial<JobPrefs>>(KEY, {});
+const LAYER_KEYS = Object.keys(LAYER_NAMES) as LayerKey[];
+function validProfiles(value: unknown): PaintProfile[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((raw): raw is PaintProfile => {
+    if (!raw || typeof raw !== 'object') return false;
+    const p = raw as Partial<PaintProfile>;
+    if (typeof p.id !== 'string' || !p.id || typeof p.name !== 'string' || !p.name.trim() ||
+      typeof p.te !== 'number' || !Number.isFinite(p.te) || p.te < 10 || p.te > 100 ||
+      typeof p.density !== 'number' || !Number.isFinite(p.density) || p.density < 0.5 || p.density > 10 ||
+      !p.specs || typeof p.specs !== 'object') return false;
+    return LAYER_KEYS.every((key) => {
+      const spec = p.specs![key];
+      return !!spec && Number.isFinite(spec.dft) && spec.dft > 0 &&
+        Number.isFinite(spec.vs) && spec.vs > 0 && spec.vs <= 100 &&
+        Array.isArray(spec.ratio) && spec.ratio.length === 3 &&
+        spec.ratio.every((part) => Number.isFinite(part) && part >= 0) &&
+        spec.ratio.some((part) => part > 0);
+    });
+  }).map((p) => ({ ...p, specs: structuredClone(p.specs) }));
+}
+const loadedProfiles = validProfiles(stored.profiles);
 const prefs: JobPrefs = {
   vehicle: 'auto', custom: 15, scope: 'ext', buffer: 10, te: 60, density: 1.1, autoBatch: true,
   ...stored,
   specs: { ...structuredClone(DEFAULT_SPECS), ...(stored.specs ?? {}) },
+  profiles: loadedProfiles,
+  activeProfile: loadedProfiles.some((p) => p.id === stored.activeProfile) ? stored.activeProfile! : null,
 };
 const save = () => storage.set(KEY, prefs);
 
@@ -98,6 +130,7 @@ function renderUsage(u: Usage) {
 
 export function usageHtml(u: Usage): string {
   return `<h2>Materials for this job</h2>
+  <p class="ps-small"><strong>Paint-system profile:</strong> ${esc(activeProfile()?.name ?? 'Custom estimate settings (no saved profile)')}</p>
   <p class="ps-small">${esc(jobArea().label)} · ${u.area.toFixed(1)} m² painted (${SCOPES[prefs.scope].label.toLowerCase()}) · includes ${prefs.buffer}% buffer · transfer efficiency ${prefs.te}%.</p>
   <table class="ps-formula"><thead><tr><th>Layer</th><th class="n">Coats</th><th class="n">Ready to spray (L)</th><th class="n">Paint (L)</th><th class="n">Hardener (L)</th><th class="n">Reducer (L)</th></tr></thead><tbody>
   ${u.layers.map((l) => `<tr><td>${l.name}</td><td class="n">${l.coats}</td><td class="n">${f2(l.rtsL)}</td><td class="n">${f2(l.paintL)}${l.key === 'base' ? ` (${u.baseGrams} g)` : ''}</td><td class="n">${f2(l.hardenerL)}</td><td class="n">${f2(l.reducerL)}</td></tr>`).join('')}
@@ -167,6 +200,10 @@ function specRows() {
   }).join('');
 }
 
+function activeProfile() {
+  return prefs.profiles.find((profile) => profile.id === prefs.activeProfile);
+}
+
 export function initJob() {
   $('jobVehicle').innerHTML = '<option value="auto">Match the preview car</option>' +
     VEHICLES.map((v) => `<option value="${v.id}">${v.label} (${v.area} m²)</option>`).join('') + '<option value="custom">Custom area…</option>';
@@ -179,7 +216,13 @@ export function initJob() {
     $<HTMLInputElement>('jobBuffer').value = String(prefs.buffer);
     $<HTMLInputElement>('jobTe').value = String(prefs.te);
     $<HTMLInputElement>('jobDensity').value = String(prefs.density);
+    const profileSelect = $<HTMLSelectElement>('jobProfile');
+    profileSelect.innerHTML = '<option value="">Current settings (not a saved profile)</option>' +
+      prefs.profiles.map((profile) => `<option value="${esc(profile.id)}">${esc(profile.name)}</option>`).join('');
+    profileSelect.value = prefs.activeProfile ?? '';
+    $('deleteJobProfile').toggleAttribute('disabled', !activeProfile());
   };
+  $<HTMLInputElement>('jobProfileName').value = activeProfile()?.name ?? '';
   sync();
   specRows();
   $('travelInputs').innerHTML = `<table class="travel-entry"><thead><tr><th>Angle</th><th>L*</th><th>a*</th><th>b*</th></tr></thead><tbody>${ANGLES.map((angle) =>
@@ -190,8 +233,55 @@ export function initJob() {
   $('jobScope').addEventListener('change', (e) => set(() => { prefs.scope = (e.target as HTMLSelectElement).value; }));
   $('jobCustom').addEventListener('input', (e) => set(() => { prefs.custom = Math.max(0, +(e.target as HTMLInputElement).value || 0); }));
   $('jobBuffer').addEventListener('input', (e) => set(() => { prefs.buffer = Math.min(100, Math.max(0, +(e.target as HTMLInputElement).value || 0)); }));
-  $('jobTe').addEventListener('input', (e) => set(() => { prefs.te = Math.min(100, Math.max(10, +(e.target as HTMLInputElement).value || 60)); }));
-  $('jobDensity').addEventListener('input', (e) => set(() => { prefs.density = Math.max(0.5, +(e.target as HTMLInputElement).value || 1.1); }));
+  const editProfileValues = (fn: () => void) => set(() => { fn(); prefs.activeProfile = null; });
+  $('jobTe').addEventListener('input', (e) => editProfileValues(() => { prefs.te = Math.min(100, Math.max(10, +(e.target as HTMLInputElement).value || 60)); }));
+  $('jobDensity').addEventListener('input', (e) => editProfileValues(() => { prefs.density = Math.max(0.5, +(e.target as HTMLInputElement).value || 1.1); }));
+  $('jobProfile').addEventListener('change', (e) => {
+    const id = (e.target as HTMLSelectElement).value;
+    const profile = prefs.profiles.find((item) => item.id === id);
+    if (!profile) { prefs.activeProfile = null; save(); sync(); changed(); return; }
+    prefs.te = profile.te;
+    prefs.density = profile.density;
+    prefs.specs = structuredClone(profile.specs);
+    prefs.activeProfile = profile.id;
+    save();
+    specRows();
+    sync();
+    $<HTMLInputElement>('jobProfileName').value = profile.name;
+    changed();
+  });
+  $('saveJobProfile').addEventListener('click', () => {
+    const name = $<HTMLInputElement>('jobProfileName').value.trim();
+    if (!name) {
+      $('jobProfileStatus').textContent = 'Enter a paint-system profile name first.';
+      return;
+    }
+    const existing = prefs.profiles.find((profile) => profile.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+    const profile: PaintProfile = {
+      id: existing?.id ?? `profile-${Date.now().toString(36)}`,
+      name,
+      te: prefs.te,
+      density: prefs.density,
+      specs: structuredClone(prefs.specs),
+    };
+    if (existing) prefs.profiles[prefs.profiles.indexOf(existing)] = profile;
+    else prefs.profiles.unshift(profile);
+    prefs.activeProfile = profile.id;
+    save();
+    $('jobProfileStatus').textContent = `Saved ${name}.`;
+    sync();
+    changed();
+  });
+  $('deleteJobProfile').addEventListener('click', () => {
+    const profile = activeProfile();
+    if (!profile) return;
+    prefs.profiles = prefs.profiles.filter((item) => item.id !== profile.id);
+    prefs.activeProfile = null;
+    save();
+    $('jobProfileStatus').textContent = `Removed ${profile.name}. Current values were kept.`;
+    sync();
+    changed();
+  });
   $('specBody').addEventListener('change', (e) => {
     const i = e.target as HTMLInputElement, k = i.dataset.spec as LayerKey, f = i.dataset.f!;
     if (!k) return;
@@ -200,10 +290,12 @@ export function initJob() {
       if (parts.length === 3 && parts[0] > 0) prefs.specs[k].ratio = parts as [number, number, number];
       else i.value = prefs.specs[k].ratio.join(':');
     } else (prefs.specs[k] as unknown as Record<string, number>)[f] = Math.max(1, +i.value || (DEFAULT_SPECS[k] as unknown as Record<string, number>)[f]);
+    prefs.activeProfile = null;
     save();
+    sync();
     changed();
   });
-  $('specReset').addEventListener('click', () => { prefs.specs = structuredClone(DEFAULT_SPECS); save(); specRows(); changed(); });
+  $('specReset').addEventListener('click', () => { prefs.specs = structuredClone(DEFAULT_SPECS); prefs.activeProfile = null; save(); specRows(); sync(); changed(); });
   // Batch: Auto sizes it from the job; typing a weight switches Auto off.
   $('batchAuto').addEventListener('click', () => { prefs.autoBatch = !prefs.autoBatch; save(); changed(); });
   $('batch').addEventListener('input', () => { if (prefs.autoBatch) { prefs.autoBatch = false; save(); $('batchAuto').setAttribute('aria-pressed', 'false'); } });

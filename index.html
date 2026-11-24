@@ -209,6 +209,15 @@
         <p class="cover" id="jobArea"></p>
         <table class="usage"><thead><tr><th>Layer</th><th class="n">Coats</th><th class="n">Ready (L)</th><th class="n">Paint (L)</th><th class="n">Hardener</th><th class="n">Reducer</th></tr></thead><tbody id="usageBody"></tbody></table>
         <details class="help"><summary>Coverage settings (match your paint's TDS)</summary>
+          <div class="job-grid paint-profile">
+            <label>Saved paint-system profile<select id="jobProfile" aria-label="Saved paint-system profile"></select></label>
+            <label>Profile name<input id="jobProfileName" type="text" maxlength="80" placeholder="Example: 2K clearcoat system"></label>
+            <div class="profile-actions">
+              <button class="chip" id="saveJobProfile" type="button">Save current values as profile</button>
+              <button class="chip" id="deleteJobProfile" type="button" disabled>Remove selected profile</button>
+            </div>
+          </div>
+          <p class="ps-small" id="jobProfileStatus" role="status" aria-live="polite">Profiles store film build, volume solids, mix ratios, transfer efficiency, and base-colour density on this device.</p>
           <div class="job-grid">
             <label>Transfer efficiency (%)<input id="jobTe" type="number" min="10" max="100" step="1"></label>
             <label>Base colour density (kg/L)<input id="jobDensity" type="number" min="0.5" step="0.05"></label>

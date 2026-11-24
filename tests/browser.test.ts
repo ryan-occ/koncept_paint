@@ -469,6 +469,55 @@ describe('paint booth browser flows', { concurrency: false }, () => {
     assert.equal(await page.locator('#travelClear').isDisabled(), true);
   });
 
+  it('saves, reuses, and prints paint-system estimate profiles', async () => {
+    await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Recipe & guide' }).click();
+    await page.getByText('Coverage settings (match your paint\'s TDS)').click();
+    await page.locator('#jobProfileName').fill('Shop clear system');
+    await page.locator('#jobTe').fill('75');
+    await page.locator('#jobDensity').fill('1.25');
+    await page.locator('[data-spec="base"][data-f="dft"]').fill('18');
+    await page.locator('[data-spec="base"][data-f="vs"]').fill('24');
+    await page.locator('[data-spec="clear"][data-f="ratio"]').fill('3:1:0.5');
+    await page.locator('[data-spec="clear"][data-f="ratio"]').dispatchEvent('change');
+    await page.getByRole('button', { name: 'Save current values as profile' }).click();
+
+    const profile = await page.evaluate(() => {
+      const saved = JSON.parse(localStorage.getItem('pbs-job') || '{}');
+      return saved.profiles.find((item: { name: string }) => item.name === 'Shop clear system');
+    });
+    assert.ok(profile);
+    assert.equal(profile.te, 75);
+    assert.equal(profile.density, 1.25);
+    assert.equal(profile.specs.base.dft, 18);
+    assert.equal(profile.specs.base.vs, 24);
+    assert.deepEqual(profile.specs.clear.ratio, [3, 1, 0.5]);
+    assert.equal(await page.locator('#jobProfile').inputValue(), profile.id);
+
+    await page.locator('#jobTe').fill('50');
+    await page.locator('#jobDensity').fill('0.8');
+    await page.locator('[data-spec="base"][data-f="dft"]').fill('10');
+    await page.locator('#jobProfileName').click();
+    const customEstimate = await page.locator('#usageBody').innerText();
+    await page.locator('#jobProfile').selectOption(profile.id);
+    const profileEstimate = await page.locator('#usageBody').innerText();
+    assert.notEqual(profileEstimate, customEstimate, 'profile assumptions should change the material estimate');
+    assert.equal(await page.locator('#jobTe').inputValue(), '75');
+    assert.equal(await page.locator('#jobDensity').inputValue(), '1.25');
+    assert.equal(await page.locator('[data-spec="base"][data-f="dft"]').inputValue(), '18');
+    assert.equal(await page.locator('[data-spec="base"][data-f="vs"]').inputValue(), '24');
+    assert.equal(await page.locator('[data-spec="clear"][data-f="ratio"]').inputValue(), '3:1:0.5');
+
+    await page.reload();
+    await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Recipe & guide' }).click();
+    await page.getByText('Coverage settings (match your paint\'s TDS)').click();
+    assert.equal(await page.locator('#jobProfile').inputValue(), profile.id);
+    await page.evaluate(() => { window.print = () => {}; });
+    await page.getByRole('button', { name: 'Print sheet' }).click();
+    const printed = await page.locator('#printSheet').innerText();
+    assert.match(printed, /Paint-system profile:\s+Shop clear system/);
+    assert.match(printed, /confirm ratios and film build with the paint system's TDS/i);
+  });
+
   it('restores calibration data from the backup panel and persists it', async () => {
     await page.locator('.tabs[data-group="work"]').getByRole('tab', { name: 'Calibrate' }).click();
     await page.getByText('Back up or restore calibration').click();
