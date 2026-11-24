@@ -97,6 +97,19 @@
     <div class="view" id="view">
       <canvas id="cv" aria-label="3D paint preview. Drag to rotate, scroll or pinch to zoom."></canvas>
       <div class="fail" id="fail">The 3D preview couldn't start in this browser. The mixing bench and recipe still work.</div>
+      <p class="model-credit" id="modelCreditShow" hidden></p>
+      <details class="model-box" id="modelBox">
+        <summary>Car model: <span id="modelName">None loaded</span></summary>
+        <div class="model-body">
+          <label class="btn ghost sm">Upload .glb<input id="modelFile" type="file" accept=".glb,model/gltf-binary" hidden></label>
+          <button class="chip" id="modelPick" type="button" aria-pressed="false" hidden>Choose paint parts</button>
+          <button class="chip" id="modelRemove" type="button" hidden>Remove</button>
+          <label class="model-credit-in">Credit shown on the preview (needed for CC BY models)
+            <input id="modelCredit" type="text" maxlength="160" placeholder="e.g. Model by Daniel Zhabotinsky, CC BY 4.0">
+          </label>
+          <p class="caveat" id="modelMsg" role="status" aria-live="polite">The model stays in this browser and is not uploaded to the server.</p>
+        </div>
+      </details>
       <div class="bar top">
         <div class="seg" id="shapeSeg" role="group" aria-label="Preview shape"></div>
         <div class="seg" id="lightSeg" role="group" aria-label="Lighting"></div>

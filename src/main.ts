@@ -4,6 +4,7 @@ import { initCalibration } from './ui/calibrate.ts';
 import { initSearch } from './ui/search.ts';
 import { initPhotoMatch } from './ui/photo-match.ts';
 import { initLayout } from './ui/layout.ts';
+import { initCarModel, attachCarModel } from './ui/car-model.ts';
 import { $, view } from './ui/store.ts';
 
 async function lockApp() {
@@ -74,6 +75,7 @@ initCalibration();
 initSearch();
 initPhotoMatch();
 initLayout();
+initCarModel();
 
 function startBooth() {
   void import('./render/booth.ts').then(({ Booth }) => {
@@ -81,6 +83,7 @@ function startBooth() {
     booth.setLight(view.light);
     booth.setShape(view.shape);
     attachBooth(booth);
+    void attachCarModel(booth);
   }).catch((err) => {
     console.error(err);
     $('fail').style.display = 'grid';
