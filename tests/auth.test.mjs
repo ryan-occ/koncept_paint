@@ -109,7 +109,14 @@ test('app pages and source requests show only the passcode screen before login',
   const loginHtml = await home.text();
   assert.equal(home.status, 200);
   assert.match(loginHtml, /Enter the six-digit passcode/);
+  assert.match(loginHtml, /src="\/koncept-mark\.png"/);
   assert.doesNotMatch(loginHtml, /id="lockApp"/);
+
+  const brand = await fetch(`${origin}/koncept-mark.png`);
+  assert.equal(brand.status, 200);
+  assert.equal(brand.headers.get('content-type'), 'image/png');
+  assert.match(brand.headers.get('cache-control') ?? '', /public/);
+  assert.deepEqual(Buffer.from(await brand.arrayBuffer()).subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
 
   const source = await fetch(`${origin}/src/main.ts`);
   assert.match(source.headers.get('content-type'), /text\/html/);

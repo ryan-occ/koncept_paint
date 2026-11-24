@@ -1,10 +1,10 @@
 /* VOICE: workshop tool, confident and practical, a painter's mixing bench
    IDEA: a spray booth with a mixing scale beside it: car in the light, recipe card on the bench
    PICTURE: the live 3D car (or test panel) under booth lighting, large, first thing on screen
-   COLOUR and TYPE: graphite booth and white LED, masking-tape yellow accent; Barlow Condensed like tin labels + Inter
+   COLOUR and TYPE: graphite booth and white LED, orange from the Koncept mark; Barlow Condensed + Inter
    LAYOUT: workstation: slim app bar with the current mix and its actions; colour library (left),
            live 3D stage (centre, always visible), paint-system tabs (right). Each pane scrolls on its own. */
-:root{color-scheme:light dark;--bg:light-dark(#f3f4f5,#111316);--ink:light-dark(#15171a,#eceef0);--mute:light-dark(#5b6168,#9aa1a9);--panel:light-dark(#fff,#1a1d21);--line:light-dark(#d8dbdf,#2b2f35);--chip:light-dark(#eef0f2,#23272c);--tape:#f2b705;--tapeInk:#1a1400}
+:root{color-scheme:light dark;--bg:light-dark(#f3f1ed,#171716);--ink:light-dark(#292724,#f0efec);--mute:light-dark(#68635e,#aaa59e);--panel:light-dark(#fffefa,#22211f);--line:light-dark(#d9d5cf,#3a3835);--chip:light-dark(#eeebe5,#2d2b28);--tape:#fd5507;--tapeInk:#24150e;--accent:#fd5507}
 :root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
 *{box-sizing:border-box;min-width:0}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
@@ -82,8 +82,9 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .btn.sm{padding:7px 12px;font-size:13px}
 select.sm{width:auto;font-size:13px;padding:6px 8px;min-height:34px}
 .appbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px 16px;min-height:var(--bar);padding:8px max(1.5vw,12px);background:var(--panel);border-bottom:1px solid var(--line)}
-.brand{font:700 20px/1 "Barlow Condensed",Inter,sans-serif;white-space:nowrap}
-.brand span{background:var(--tape);color:var(--tapeInk);border-radius:4px;padding:1px 6px;margin-right:2px}
+.brand{display:flex;align-items:center;gap:9px;font:700 15px/1 "Barlow Condensed",Inter,sans-serif;letter-spacing:.09em;white-space:nowrap}
+.brand img{display:block;width:46px;height:38px;object-fit:contain;background:#fff;border-radius:3px}
+.brand span{color:var(--ink)}
 .current{display:flex;align-items:center;gap:10px;flex:1 1 320px;max-width:560px}
 .cur-sw{flex:none;width:38px;height:38px;border-radius:8px;border:1px solid var(--line)}
 .cur-text{flex:1;display:grid}
@@ -209,8 +210,8 @@ h3.sub{font-size:16px;margin:16px 0 6px;color:var(--ink)}
 /* narrow: page scrolls, preview stays pinned at the top */
 @media(max-width:899.98px){
   .appbar{position:static;flex-wrap:wrap}
-  .brand{display:none}
-  .current{flex-basis:100%;max-width:none}
+  .brand{flex:0 0 auto}
+  .current{flex:1 1 250px;max-width:none}
   .actions{margin-left:0;width:100%}
   .actions .batch{margin-right:auto}
   .ws{grid-template-columns:minmax(0,1fr);padding:8px}
@@ -245,7 +246,7 @@ h3.sub{font-size:16px;margin:16px 0 6px;color:var(--ink)}
 .ps h3 em{font-style:normal;font-weight:500;color:#555;margin-left:6px}
 .ps p{margin:2px 0}
 .ps ul,.ps ol{margin:4px 0 0;padding-left:18px}
-.ps-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:3px solid #f2b705;padding-bottom:8px}
+.ps-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:3px solid #fd5507;padding-bottom:8px}
 .ps-name{font-size:13pt;font-weight:600;margin-top:4px}
 .ps-final{display:flex;gap:10px;align-items:center;font-size:9.5pt;text-align:right}
 .ps-big{display:block;width:22mm;height:22mm;border:1px solid #999;border-radius:3px}

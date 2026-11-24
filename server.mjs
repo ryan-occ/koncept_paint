@@ -177,24 +177,31 @@ const LOGIN_PAGE = `<!doctype html>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Enter passcode · Koncept Paint Booth</title>
-  <style>
-    *{box-sizing:border-box}
-    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:#f1f2f4;color:#202124;font:16px/1.5 system-ui,sans-serif}
-    main{width:min(100%,390px);padding:28px;background:#fff;border:1px solid #d9dce0;border-radius:16px;box-shadow:0 12px 36px #17203312}
-    h1{margin:0 0 8px;font-size:25px;line-height:1.15}
-    p{margin:0 0 20px;color:#5f6368}
+   <style>
+     *{box-sizing:border-box}
+     body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:#f3f1ed;color:#292724;font:16px/1.5 system-ui,sans-serif}
+     main{width:min(100%,390px);padding:28px;background:#fffefa;border:1px solid #d9d5cf;border-radius:14px;box-shadow:0 16px 42px #34271e12}
+     .brand{display:block;width:112px;height:90px;object-fit:contain;background:#fff;border-radius:4px;margin:0 auto 18px}
+     h1{margin:0 0 8px;font-size:25px;line-height:1.15;letter-spacing:-.02em}
+     h1 span{color:#fd5507}
+     p{margin:0 0 20px;color:#68635e}
     label{display:block;margin-bottom:7px;font-weight:600}
-    input{width:100%;height:52px;padding:0 14px;border:1px solid #b7bbc1;border-radius:9px;font:600 24px/1 system-ui,sans-serif;letter-spacing:.35em;text-align:center}
-    input:focus{outline:2px solid #f5b900;outline-offset:2px}
-    button{width:100%;min-height:46px;margin-top:14px;border:0;border-radius:9px;background:#f5b900;color:#231c00;font:600 15px system-ui,sans-serif;cursor:pointer}
+     input{width:100%;height:52px;padding:0 14px;border:1px solid #c9c2b9;border-radius:8px;background:#fffefa;color:#292724;font:600 24px/1 system-ui,sans-serif;letter-spacing:.35em;text-align:center}
+     input:focus{outline:2px solid #fd5507;outline-offset:2px;border-color:#fd5507}
+     button{width:100%;min-height:46px;margin-top:14px;border:0;border-radius:8px;background:#fd5507;color:#24150e;font:600 15px system-ui,sans-serif;cursor:pointer;transition:background-color .15s ease,transform .15s ease}
+     button:hover{background:#e94900}
+     button:focus-visible{outline:2px solid #292724;outline-offset:3px}
+     button:active{transform:translateY(1px)}
     button:disabled{opacity:.6;cursor:wait}
-    #message{min-height:24px;margin:12px 0 0;color:#a32020}
-    .setup{padding:12px;border-radius:8px;background:#fff6d7;color:#514000}
+     #message{min-height:24px;margin:12px 0 0;color:#a32020}
+     .setup{padding:12px;border-left:3px solid #fd5507;border-radius:4px;background:#f4ece5;color:#51483f}
+     @media(max-width:480px){main{padding:24px}.brand{width:100px;height:80px;margin-bottom:14px}}
   </style>
 </head>
 <body>
-  <main>
-    <h1>Paint booth simulator</h1>
+   <main>
+     <img class="brand" src="/koncept-mark.png" alt="Koncept official mark">
+     <h1><span>Koncept</span> Paint Booth</h1>
     ${configured()
       ? `<p>Enter the six-digit passcode to continue. Your session locks after ${IDLE_TIMEOUT_TEXT} without activity and expires after eight hours.</p>
          <form id="unlock">
@@ -242,7 +249,7 @@ function sendLoginPage(request, response) {
   if (sessionCookie(request)) clearSessionCookie(request, response);
   response.setHeader(
     'Content-Security-Policy',
-    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+     "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   );
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   response.end(request.method === 'HEAD' ? undefined : LOGIN_PAGE);
@@ -358,6 +365,23 @@ async function handleRequest(request, response, { dev, vite }) {
   if (url.pathname.startsWith('/api/')) return sendJson(response, 404, { error: 'Not found.' });
   if (!['GET', 'HEAD'].includes(request.method ?? '')) {
     return sendJson(response, 405, { error: 'Method not allowed.' }, { Allow: 'GET, HEAD' });
+  }
+  // The logo is included on the passcode page, so allow this single non-sensitive file before login.
+  if (url.pathname === '/koncept-mark.png') {
+    try {
+      const imagePath = dev
+        ? resolve(ROOT, 'public', 'koncept-mark.png')
+        : resolve(DIST, 'koncept-mark.png');
+      const image = await readFile(imagePath);
+      secureHeaders(response);
+      response.setHeader('Cache-Control', 'public, max-age=86400');
+      response.writeHead(200, { 'Content-Type': 'image/png' });
+      response.end(request.method === 'HEAD' ? undefined : image);
+    } catch {
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Not found.');
+    }
+    return;
   }
   if (!hasSession(request)) return sendLoginPage(request, response);
 
