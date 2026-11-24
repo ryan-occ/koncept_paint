@@ -146,17 +146,17 @@ export class Booth {
     this.maxR = v.max;
     this.target.set(0, v.y, 0);
     this.setRepeat(v.repeat);
-    this.fitCustomCamera();
+    this.fitCustomCamera(true);
   }
 
-  private fitCustomCamera() {
+  private fitCustomCamera(reset = false) {
     if (this.shape !== 'custom' || !this.carModel) return;
     const box = new THREE.Box3().setFromObject(this.carModel.root);
     const size = box.getSize(new THREE.Vector3());
     const width = Math.max(size.x, size.z);
     const halfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
-    const fitRadius = width / (2 * Math.tan(halfFov) * Math.max(this.camera.aspect, 0.1) * 0.88);
-    this.rad = Math.max(this.rad, fitRadius);
+    const fitRadius = width / (2 * Math.tan(halfFov) * Math.max(this.camera.aspect, 0.1) * 0.72);
+    this.rad = reset ? Math.max(this.minR, fitRadius) : Math.max(this.rad, fitRadius);
     this.maxR = Math.max(this.maxR, this.rad * 1.8);
   }
 
