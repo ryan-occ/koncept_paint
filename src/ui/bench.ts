@@ -48,7 +48,7 @@ function currentAngleAnalysis() {
 }
 
 export function syncUI() {
-  seg('shapeSeg', [['panel', 'Test panel'], ['sphere', 'Sphere'], ['car', 'Car']], view, 'shape', () => booth?.setShape(view.shape));
+  refreshShapes();
   seg('lightSeg', Object.entries(LIGHTS).map(([k, v]) => [k, v.label]), view, 'light', () => booth?.setLight(view.light));
   seg('spinSeg', [['on', 'Auto-rotate'], ['off', 'Hold']], view, 'spin', () => booth && (booth.autoRotate = view.spin === 'on'));
   seg('groundSeg', Object.entries(GROUNDS).map(([k, v]) => [k, v[0]]), mix, 'g');
@@ -246,6 +246,13 @@ export function initBench(b: Booth | null) {
 
   drawSaved();
   load(PRESETS[0]);
+}
+
+/** Preview shape buttons; "Your car" appears once a model is loaded. */
+export function refreshShapes() {
+  const opts: Opt[] = [['panel', 'Test panel'], ['sphere', 'Sphere'], ['car', 'Car']];
+  if (view.hasCar) opts.push(['custom', 'Your car']);
+  seg('shapeSeg', opts, view, 'shape', () => booth?.setShape(view.shape));
 }
 
 export function attachBooth(b: Booth) {
