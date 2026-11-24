@@ -21,10 +21,10 @@ export const CARS: BuiltInCar[] = [
   },
   {
     id: 'porsche-911-4s', name: 'Porsche 911 Carrera 4S', file: 'models/porsche-911-carrera-4s.glb', paint: ['paint'], sizeMb: 12.9, areaM2: 14,
-    credit: '"(FREE) Porsche 911 Carrera 4S" by Karol Miklas, CC BY-SA 4.0, optimised for web',
+    credit: '"Porsche 911 Carrera 4S" by Karol Miklas, CC BY-SA 4.0, optimised for web',
   },
   {
     id: 'bmw-m3-e30', name: 'BMW M3 E30', file: 'models/bmw-m3-e30.glb', paint: ['BMW_E30_M3_PAINT'], sizeMb: 4.9, areaM2: 12,
-    credit: '"[FREE] BMW M3 E30" by Martin Trafas, CC BY 4.0, optimised for web',
+    credit: '"BMW M3 E30" by Martin Trafas, CC BY 4.0, optimised for web',
   },
 ];
