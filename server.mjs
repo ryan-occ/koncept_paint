@@ -404,8 +404,14 @@ async function handleRequest(request, response, { dev, vite }) {
       '.jpg': 'image/jpeg',
       '.webp': 'image/webp',
       '.ico': 'image/x-icon',
+      '.glb': 'model/gltf-binary',
     };
     const content = await readFile(filePath);
+    // Hashed build assets never change; car models are large, so let the browser keep them.
+    // Both sit behind the passcode, hence "private".
+    const rel = filePath.slice(DIST.length + 1).split(sep).join('/');
+    if (rel.startsWith('assets/')) response.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    else if (rel.startsWith('models/')) response.setHeader('Cache-Control', 'private, max-age=604800');
     response.writeHead(200, { 'Content-Type': contentTypes[extname(filePath)] ?? 'application/octet-stream' });
     response.end(request.method === 'HEAD' ? undefined : content);
   } catch {

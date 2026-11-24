@@ -16,6 +16,29 @@ test('named body and paint parts are picked, glass, tyres and chrome are not', (
   assert.deepEqual(guessPaintParts(parts), [0, 1, 5]);
 });
 
+test('multi-material bodies paint only the paint slot, not glass, trim, or wheel materials', () => {
+  const parts = [
+    part('SportsCar01_Body', 'Paint'),
+    part('SportsCar01_Body', 'Glass', 1, true),
+    part('SportsCar01_Body', 'Trim'),
+    part('SportsCar01_Wheel', 'Tyre'),
+    part('SportsCar01_Wheel', 'Rim'),
+  ];
+  assert.deepEqual(guessPaintParts(parts), [0]);
+});
+
+test('carpaint materials on underbody parts, lights, and suspension are excluded', () => {
+  const parts = [
+    part('GT500.Body_carpaint_0', 'carpaint'),
+    part('GT500.Door.L_carpaint_0', 'carpaint'),
+    part('GT500.Lowerarm.B.Ft_carpaint_0', 'carpaint'),
+    part('GT500.Headlight.L_carpaint_0', 'carpaint'),
+    part('GT500.Spring.R_carpaint_0', 'carpaint'),
+    part('GT500.Wheel.Ft.L_tire_0', 'tire'),
+  ];
+  assert.deepEqual(guessPaintParts(parts), [0, 1]);
+});
+
 test('unnamed models fall back to the material covering the most of the car', () => {
   const parts = [
     part('Object_2', 'Material.001', 4),

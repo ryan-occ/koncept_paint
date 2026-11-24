@@ -9,6 +9,7 @@ import { buildEnvironment, LIGHTS, type LightId } from './lighting.ts';
 import { guessPaintParts } from './paint-detect.ts';
 
 export type ShapeId = 'panel' | 'sphere' | 'car' | 'custom';
+type CarPaintPart = { meshIndex: number; materialIndex: number | null };
 
 const VIEW: Record<ShapeId, { rad: number; y: number; min: number; max: number; repeat: number }> = {
   car: { rad: 7.6, y: 0.7, min: 4.5, max: 13, repeat: 3 },
@@ -87,7 +88,13 @@ export class Booth {
   /** When on, a click (not a drag) on the imported car toggles whether that part is painted. */
   pickMode = false;
   onPaintPartsChange?: (painted: number[]) => void;
-  private carModel?: { root: THREE.Object3D; meshes: THREE.Mesh[]; originals: (THREE.Material | THREE.Material[])[]; painted: Set<number> };
+  private carModel?: {
+    root: THREE.Object3D;
+    meshes: THREE.Mesh[];
+    originals: (THREE.Material | THREE.Material[])[];
+    parts: CarPaintPart[];
+    painted: Set<number>;
+  };
 
   constructor(canvas: HTMLCanvasElement, private host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -114,6 +121,7 @@ export class Booth {
       this.renderer.setSize(w, h, false);
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
+      this.fitCustomCamera();
     }).observe(host);
     this.bindControls(canvas);
     this.renderer.setAnimationLoop(() => this.frame());
@@ -138,6 +146,18 @@ export class Booth {
     this.maxR = v.max;
     this.target.set(0, v.y, 0);
     this.setRepeat(v.repeat);
+    this.fitCustomCamera();
+  }
+
+  private fitCustomCamera() {
+    if (this.shape !== 'custom' || !this.carModel) return;
+    const box = new THREE.Box3().setFromObject(this.carModel.root);
+    const size = box.getSize(new THREE.Vector3());
+    const width = Math.max(size.x, size.z);
+    const halfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const fitRadius = width / (2 * Math.tan(halfFov) * Math.max(this.camera.aspect, 0.1) * 0.88);
+    this.rad = Math.max(this.rad, fitRadius);
+    this.maxR = Math.max(this.maxR, this.rad * 1.8);
   }
 
   /**
@@ -145,7 +165,7 @@ export class Booth {
    * `painted` restores a saved choice of paint parts; otherwise they are detected.
    * Returns the painted part indices.
    */
-  async loadCarModel(data: ArrayBuffer, painted?: number[] | null): Promise<number[]> {
+  async loadCarModel(data: ArrayBuffer, painted?: number[] | null, paintMaterials?: string[]): Promise<number[]> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     const gltf = await new GLTFLoader().parseAsync(data, '');
     const root = gltf.scene;
@@ -162,19 +182,51 @@ export class Booth {
     const meshes: THREE.Mesh[] = [];
     root.traverse((o: THREE.Object3D) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
     if (!meshes.length) throw new Error('The file has no 3D parts to paint.');
-    const matName = (m: THREE.Material | THREE.Material[]) => (Array.isArray(m) ? m.map((x) => x.name).join(' ') : m.name);
-    const isClear = (m: THREE.Material | THREE.Material[]) => (Array.isArray(m) ? m : [m]).some((x) => (x.transparent && x.opacity < 0.95) || (x as THREE.MeshPhysicalMaterial).transmission > 0.2);
-    const infos = meshes.map((m) => ({
-      name: m.name,
-      material: matName(m.material),
-      size: new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()).length(),
-      transparent: isClear(m.material),
-    }));
-    const valid = (painted ?? []).filter((i) => i >= 0 && i < meshes.length);
-    const chosen = painted && valid.length ? valid : guessPaintParts(infos);
+    const parts = meshes.flatMap((mesh, meshIndex) => {
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const materialIndexes: (number | null)[] = Array.isArray(mesh.material)
+        ? [...new Set(mesh.geometry.groups.length
+          ? mesh.geometry.groups.map((group) => group.materialIndex)
+            .filter((index): index is number => typeof index === 'number' && Number.isInteger(index))
+          : materials.map((_, index) => index))]
+          .filter((index) => index >= 0 && index < materials.length)
+        : [null];
+      const size = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).length();
+      return materialIndexes.map((materialIndex) => {
+        const material = materialIndex === null ? materials[0] : materials[materialIndex];
+        const info = {
+          name: mesh.name,
+          material: material.name,
+          size,
+          transparent: (material.transparent && material.opacity < 0.95) ||
+            (material as THREE.MeshPhysicalMaterial).transmission > 0.2,
+        };
+        return { meshIndex, materialIndex, info };
+      });
+    });
+    const infos = parts.map((part) => part.info);
+    const detected = guessPaintParts(infos);
+    const requestedMaterials = new Set((paintMaterials ?? []).map((name) => name.trim().toLowerCase()));
+    const byMaterial = requestedMaterials.size
+      ? parts.flatMap((part, index) =>
+        requestedMaterials.has(part.info.material.trim().toLowerCase()) && detected.includes(index) ? [index] : [],
+      )
+      : [];
+    if (requestedMaterials.size && !byMaterial.length) {
+      throw new Error(`None of the configured paint materials were found: ${[...requestedMaterials].join(', ')}`);
+    }
+    const chosen = painted != null
+      ? painted.filter((i) => i >= 0 && i < parts.length)
+      : byMaterial.length ? byMaterial : detected;
 
     this.clearCarModel();
-    this.carModel = { root, meshes, originals: meshes.map((m) => m.material), painted: new Set(chosen) };
+    this.carModel = {
+      root,
+      meshes,
+      originals: meshes.map((m) => m.material),
+      parts: parts.map(({ meshIndex, materialIndex }) => ({ meshIndex, materialIndex })),
+      painted: new Set(chosen),
+    };
     this.applyPaintParts();
     this.groups.custom.add(root);
     return [...this.carModel.painted];
@@ -195,12 +247,28 @@ export class Booth {
   private applyPaintParts() {
     const c = this.carModel;
     if (!c) return;
-    c.meshes.forEach((m, i) => { m.material = c.painted.has(i) ? this.mat : c.originals[i]; });
+    const materials: (THREE.Material | THREE.Material[])[] = c.originals.map((original) =>
+      Array.isArray(original) ? [...original] : original,
+    );
+    for (const partIndex of c.painted) {
+      const part = c.parts[partIndex];
+      if (!part) continue;
+      if (part.materialIndex === null) {
+        materials[part.meshIndex] = this.mat;
+      } else {
+        const slots = Array.isArray(materials[part.meshIndex])
+          ? [...materials[part.meshIndex] as THREE.Material[]]
+          : [materials[part.meshIndex] as THREE.Material];
+        slots[part.materialIndex] = this.mat;
+        materials[part.meshIndex] = slots;
+      }
+    }
+    c.meshes.forEach((mesh, i) => { mesh.material = materials[i]; });
   }
 
   togglePaintPart(index: number) {
     const c = this.carModel;
-    if (!c || index < 0 || index >= c.meshes.length) return;
+    if (!c || index < 0 || index >= c.parts.length) return;
     if (c.painted.has(index)) c.painted.delete(index); else c.painted.add(index);
     this.applyPaintParts();
     this.onPaintPartsChange?.([...c.painted]);
@@ -214,7 +282,14 @@ export class Booth {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
     const hit = ray.intersectObjects(c.meshes, false)[0];
-    if (hit) this.togglePaintPart(c.meshes.indexOf(hit.object as THREE.Mesh));
+    if (hit) {
+      const meshIndex = c.meshes.indexOf(hit.object as THREE.Mesh);
+      const materialIndex = hit.face?.materialIndex ?? null;
+      const partIndex = c.parts.findIndex((part) =>
+        part.meshIndex === meshIndex && (part.materialIndex === null || part.materialIndex === materialIndex),
+      );
+      if (partIndex >= 0) this.togglePaintPart(partIndex);
+    }
   }
 
   private setRepeat(k: number) {

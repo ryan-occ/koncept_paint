@@ -251,7 +251,7 @@ export function initBench(b: Booth | null) {
 /** Preview shape buttons; "Your car" appears once a model is loaded. */
 export function refreshShapes() {
   const opts: Opt[] = [['panel', 'Test panel'], ['sphere', 'Sphere'], ['car', 'Car']];
-  if (view.hasCar) opts.push(['custom', 'Your car']);
+  if (view.hasCar) opts.push(['custom', 'Real car']);
   seg('shapeSeg', opts, view, 'shape', () => booth?.setShape(view.shape));
 }
 

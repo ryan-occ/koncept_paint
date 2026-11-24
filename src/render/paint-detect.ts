@@ -1,6 +1,7 @@
 /**
  * Decide which parts of an imported car model are painted body panels.
- * Pure logic (no Three.js) so it can be unit-tested; the renderer supplies one entry per mesh.
+ * Pure logic (no Three.js) so it can be unit-tested; the renderer supplies one entry per mesh
+ * or material slot.
  */
 export interface PartInfo {
   /** mesh (node) name */
@@ -12,7 +13,7 @@ export interface PartInfo {
   transparent: boolean;
 }
 
-const NOT_PAINT = /glass|window|windshield|windscreen|tyre|tire|rubber|chrome|light|lamp|lens|interior|seat|dash|steer|rim|wheel|brake|disc|caliper|plate|licen[cs]e|grill|grille|exhaust|engine|chassis|under|logo|badge|emblem|wiper|plastic|trim|mirror_?glass|carbon|metal_?dark|black_?matte|shadow|ao_?plane/i;
+const NOT_PAINT = /glass|window|windshield|windscreen|tyre|tire|rubber|chrome|light|lamp|lens|interior|seat|dash|steer|rim|wheel|brake|disc|caliper|plate|licen[cs]e|grill|grille|exhaust|engine|chassis|under|lowerarm|upperarm|subframe|swaybar|radiator|transmission|strut|stut|tierod|halfshaft|shock|spring|hub|fueltank|differential|diff|steeringbox|suspension|logo|badge|emblem|wiper|plastic|trim|mirror_?glass|carbon|metal_?dark|black_?matte|shadow|ao_?plane/i;
 const PAINT = /paint|body|carpaint|car_paint|exterior|shell|coat|hood|bonnet|door|fender|wing|bumper|trunk|boot|roof|quarter|panel|spoiler/i;
 
 /** Indices of parts that should get the paint system. */
