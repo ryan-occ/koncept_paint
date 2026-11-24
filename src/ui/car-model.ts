@@ -118,6 +118,6 @@ export async function attachCarModel(b: Booth) {
   b.onPaintPartsChange = (painted) => { if (current) { current.painted = painted; save(); } };
   try {
     const saved = await store('get');
-    if (saved?.data) await show(saved, false);
+    if (saved?.data) await show(saved, true);
   } catch { /* storage unavailable: start without a model */ }
 }
