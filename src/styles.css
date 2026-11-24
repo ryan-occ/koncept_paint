@@ -145,12 +145,13 @@ h3.sub{font-size:16px;margin:16px 0 6px;color:var(--ink)}
 .model-body .chip{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#eceef0;font-size:12px;padding:6px 10px}
 .model-body .chip[aria-pressed=true]{background:var(--tape);color:var(--tapeInk);border-color:var(--tape)}
 .model-body .btn.ghost{background:rgba(255,255,255,.12);color:#eceef0;border-color:rgba(255,255,255,.2)}
+.model-body select{flex:1 1 100%;font:14px Inter,sans-serif;padding:7px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.25);background:#24272c;color:#fff}
 .model-credit-in{display:grid;gap:4px;width:100%;font-size:12px;opacity:.9}
 .model-credit-in input{font:14px Inter,sans-serif;padding:6px 8px;border-radius:7px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.25);color:#fff}
 .model-body .caveat{color:#c9cdd2;margin:0;width:100%}
 .model-credit{position:absolute;right:12px;bottom:10px;z-index:2;margin:0;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:3px 8px;border-radius:6px;max-width:55%}
 .view.picking canvas{cursor:crosshair}
-.model-body [hidden],.model-credit[hidden]{display:none}
+.model-body [hidden],.model-credit[hidden],.model-credit-in[hidden]{display:none}
 
 /* wide: three panes, no page scroll */
 @media(min-width:1200px){

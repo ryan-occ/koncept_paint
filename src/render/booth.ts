@@ -145,7 +145,7 @@ export class Booth {
    * `painted` restores a saved choice of paint parts; otherwise they are detected.
    * Returns the painted part indices.
    */
-  async loadCarModel(data: ArrayBuffer, painted?: number[] | null): Promise<number[]> {
+  async loadCarModel(data: ArrayBuffer, painted?: number[] | null, paintMaterials?: string[]): Promise<number[]> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     const gltf = await new GLTFLoader().parseAsync(data, '');
     const root = gltf.scene;
@@ -171,7 +171,10 @@ export class Booth {
       transparent: isClear(m.material),
     }));
     const valid = (painted ?? []).filter((i) => i >= 0 && i < meshes.length);
-    const chosen = painted && valid.length ? valid : guessPaintParts(infos);
+    const byMaterial = paintMaterials?.length
+      ? infos.map((p, i) => [p, i] as const).filter(([p]) => paintMaterials.some((n) => p.material.split(' ').includes(n))).map(([, i]) => i)
+      : [];
+    const chosen = painted && valid.length ? valid : byMaterial.length ? byMaterial : guessPaintParts(infos);
 
     this.clearCarModel();
     this.carModel = { root, meshes, originals: meshes.map((m) => m.material), painted: new Set(chosen) };

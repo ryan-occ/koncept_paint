@@ -1,16 +1,22 @@
 import type { Booth } from '../render/booth.ts';
-import { $, view } from './store.ts';
+import { CARS, type BuiltInCar } from '../data/cars.ts';
+import { $, storage, view } from './store.ts';
 import { refreshShapes } from './bench.ts';
 
 /**
- * Imported car model: upload a .glb, keep it in this browser (IndexedDB), credit line for
- * CC BY models, and a mode to fix which parts get the paint.
+ * Real-car models for the preview: built-in cars served with the app, or the user's own .glb
+ * kept in this browser (IndexedDB). Credits for CC BY models show on the preview.
  */
 interface StoredModel { name: string; credit: string; data: ArrayBuffer; painted: number[] }
+interface CarPrefs { sel: string; painted: Record<string, number[]> }
 
 const MAX_BYTES = 80 * 1024 * 1024;
+const PREF_KEY = 'pbs-car';
 let booth: Booth | null = null;
-let current: StoredModel | null = null;
+let upload: StoredModel | null = null;
+let active: { id: string; credit: string } | null = null;
+const prefs: CarPrefs = { sel: '', painted: {}, ...storage.get<Partial<CarPrefs>>(PREF_KEY, {}) };
+const savePrefs = () => storage.set(PREF_KEY, prefs);
 
 function db(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -20,7 +26,7 @@ function db(): Promise<IDBDatabase> {
     req.onerror = () => reject(req.error);
   });
 }
-async function store(op: 'get' | 'put' | 'delete', value?: StoredModel): Promise<StoredModel | undefined> {
+async function idb(op: 'get' | 'put' | 'delete', value?: StoredModel): Promise<StoredModel | undefined> {
   const d = await db();
   return new Promise((resolve, reject) => {
     const tx = d.transaction('models', op === 'get' ? 'readonly' : 'readwrite');
@@ -30,70 +36,116 @@ async function store(op: 'get' | 'put' | 'delete', value?: StoredModel): Promise
     req.onerror = () => reject(req.error);
   });
 }
-const save = () => { if (current) store('put', current).catch(() => msg('Saved for this session only: the browser would not store the model.')); };
 
 const msg = (t: string) => { $('modelMsg').textContent = t; };
+
 function showCredit() {
-  const c = current?.credit.trim() ?? '';
   const el = $('modelCreditShow');
-  el.textContent = c && view.shape === 'custom' ? c : '';
+  el.textContent = active && view.shape === 'custom' ? active.credit.trim() : '';
   el.hidden = !el.textContent;
 }
+
 function setPicking(on: boolean) {
   if (booth) booth.pickMode = on;
   $('modelPick').setAttribute('aria-pressed', String(on));
   $('view').classList.toggle('picking', on);
   if (on) msg('Click a part of the car to paint it or un-paint it. Drag still rotates. Click "Choose paint parts" again when done.');
 }
+
+function renderSelect() {
+  const sel = $<HTMLSelectElement>('carSel');
+  sel.innerHTML = '<option value="">No real car</option>' +
+    `<optgroup label="Built-in cars">${CARS.map((c) => `<option value="${c.id}">${c.name} (${c.sizeMb} MB)</option>`).join('')}</optgroup>` +
+    (upload ? `<optgroup label="Your upload"><option value="upload">${upload.name.replace(/</g, '&lt;')}</option></optgroup>` : '');
+  sel.value = active?.id ?? '';
+}
+
 function sync() {
-  const has = !!current && !!booth?.hasCarModel;
+  const has = !!active && !!booth?.hasCarModel;
   view.hasCar = has;
   $('modelPick').hidden = !has;
-  $('modelRemove').hidden = !has;
-  $<HTMLInputElement>('modelCredit').value = current?.credit ?? '';
-  $('modelName').textContent = has ? current!.name : 'None loaded';
+  $('modelRemove').hidden = !upload;
+  $('creditRow').hidden = active?.id !== 'upload';
+  $<HTMLInputElement>('modelCredit').value = upload?.credit ?? '';
+  $('modelName').textContent = has ? (active!.id === 'upload' ? upload!.name : CARS.find((c) => c.id === active!.id)!.name) : 'None';
   if (!has && view.shape === 'custom') { view.shape = 'car'; booth?.setShape('car'); }
+  renderSelect();
   refreshShapes();
   showCredit();
 }
 
-async function show(model: StoredModel, select: boolean) {
+async function loadInto(id: string, data: ArrayBuffer, credit: string, paint?: string[], select = true) {
   if (!booth) return;
+  setPicking(false);
   msg('Loading model…');
   try {
-    const painted = await booth.loadCarModel(model.data.slice(0), model.painted.length ? model.painted : null);
-    model.painted = painted;
-    current = model;
+    const saved = prefs.painted[id];
+    const painted = await booth.loadCarModel(data, saved?.length ? saved : null, paint);
+    active = { id, credit };
+    prefs.sel = id;
+    savePrefs();
+    if (id === 'upload' && upload) { upload.painted = painted; void idb('put', upload).catch(() => {}); }
     if (select) { view.shape = 'custom'; booth.setShape('custom'); }
     sync();
     msg(painted.length
-      ? `${painted.length} part${painted.length === 1 ? '' : 's'} painted. If the paint landed on the wrong parts, use "Choose paint parts".`
+      ? `${painted.length} part${painted.length === 1 ? '' : 's'} painted. If the paint is on the wrong parts, use "Choose paint parts".`
       : 'Could not tell which parts are the body. Use "Choose paint parts" and click the body panels.');
   } catch (err) {
     console.error(err);
     const text = String((err as Error)?.message ?? err);
-    msg(/draco|meshopt|KHR_|EXT_/i.test(text)
+    msg(/draco|meshopt/i.test(text)
       ? 'This model uses a compressed format the app cannot read yet. Export it again as a plain .glb (no Draco or Meshopt compression).'
-      : 'Could not read this file. Use a .glb (binary glTF) model.');
+      : 'Could not read this model. Use a .glb (binary glTF) file.');
   }
 }
 
+async function loadBuiltIn(car: BuiltInCar, select = true) {
+  msg(`Downloading ${car.name} (${car.sizeMb} MB)…`);
+  try {
+    const res = await fetch(car.file);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await loadInto(car.id, await res.arrayBuffer(), car.credit, car.paint, select);
+  } catch (err) {
+    console.error(err);
+    msg(`Could not download ${car.name}. Check the connection and try again.`);
+  }
+}
+
+function clearActive() {
+  setPicking(false);
+  booth?.clearCarModel();
+  active = null;
+  prefs.sel = '';
+  savePrefs();
+  sync();
+}
+
 export function initCarModel() {
+  renderSelect();
+  $('carSel').addEventListener('change', () => {
+    const v = $<HTMLSelectElement>('carSel').value;
+    if (!v) { clearActive(); msg('Real car turned off.'); return; }
+    if (v === 'upload' && upload) { void loadInto('upload', upload.data.slice(0), upload.credit); return; }
+    const car = CARS.find((c) => c.id === v);
+    if (car) void loadBuiltIn(car);
+  });
   $('modelFile').addEventListener('change', async (e) => {
     const input = e.target as HTMLInputElement, f = input.files?.[0];
     input.value = '';
     if (!f) return;
-    if (!/\.glb$/i.test(f.name)) { msg('Choose a .glb file. Sketchfab: Download 3D Model → glTF → .glb.'); return; }
+    if (!/\.glb$/i.test(f.name)) { msg('Choose a .glb file. Sketchfab: Download 3D Model → GLB.'); return; }
     if (f.size > MAX_BYTES) { msg(`That file is ${(f.size / 1048576).toFixed(0)} MB. Use one under 80 MB so it loads on phones.`); return; }
-    setPicking(false);
-    await show({ name: f.name.replace(/\.glb$/i, ''), credit: $<HTMLInputElement>('modelCredit').value, data: await f.arrayBuffer(), painted: [] }, true);
-    save();
+    upload = { name: f.name.replace(/\.glb$/i, ''), credit: '', data: await f.arrayBuffer(), painted: [] };
+    delete prefs.painted.upload;
+    await loadInto('upload', upload.data.slice(0), '');
+    void idb('put', upload).catch(() => msg('Loaded for this session only: the browser would not store the model.'));
   });
   $('modelCredit').addEventListener('input', () => {
-    if (!current) return;
-    current.credit = $<HTMLInputElement>('modelCredit').value;
+    if (!upload) return;
+    upload.credit = $<HTMLInputElement>('modelCredit').value;
+    if (active?.id === 'upload') active.credit = upload.credit;
     showCredit();
-    save();
+    void idb('put', upload).catch(() => {});
   });
   $('modelPick').addEventListener('click', () => {
     const on = $('modelPick').getAttribute('aria-pressed') !== 'true';
@@ -102,22 +154,30 @@ export function initCarModel() {
     if (!on) msg('Paint parts saved.');
   });
   $('modelRemove').addEventListener('click', () => {
-    setPicking(false);
-    booth?.clearCarModel();
-    current = null;
-    store('delete').catch(() => {});
+    if (active?.id === 'upload') clearActive();
+    upload = null;
+    delete prefs.painted.upload;
+    savePrefs();
+    void idb('delete').catch(() => {});
     sync();
-    msg('Model removed from this browser.');
+    msg('Your uploaded model was removed from this browser.');
   });
   $('shapeSeg').addEventListener('click', () => setTimeout(showCredit));
 }
 
-/** Called once the 3D preview is ready: wire part picking and restore the saved model. */
+/** Called once the 3D preview is ready: wire part picking and restore the last real car. */
 export async function attachCarModel(b: Booth) {
   booth = b;
-  b.onPaintPartsChange = (painted) => { if (current) { current.painted = painted; save(); } };
-  try {
-    const saved = await store('get');
-    if (saved?.data) await show(saved, false);
-  } catch { /* storage unavailable: start without a model */ }
+  b.onPaintPartsChange = (painted) => {
+    if (!active) return;
+    prefs.painted[active.id] = painted;
+    savePrefs();
+    if (active.id === 'upload' && upload) { upload.painted = painted; void idb('put', upload).catch(() => {}); }
+  };
+  try { upload = (await idb('get')) ?? null; } catch { upload = null; }
+  if (upload && !prefs.painted.upload && upload.painted.length) prefs.painted.upload = upload.painted;
+  sync();
+  const car = CARS.find((c) => c.id === prefs.sel);
+  if (car) await loadBuiltIn(car, false);
+  else if (prefs.sel === 'upload' && upload) await loadInto('upload', upload.data.slice(0), upload.credit, undefined, false);
 }
