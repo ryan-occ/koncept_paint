@@ -1,6 +1,6 @@
 import type { Booth } from '../render/booth.ts';
 import { CARS, type BuiltInCar } from '../data/cars.ts';
-import { $, storage, view } from './store.ts';
+import { $, changed, storage, view } from './store.ts';
 import { refreshShapes } from './bench.ts';
 
 /**
@@ -63,6 +63,7 @@ function renderSelect() {
 function sync() {
   const has = !!active && !!booth?.hasCarModel;
   view.hasCar = has;
+  view.carId = has ? active!.id : undefined;
   $('modelPick').hidden = !has;
   $('modelRemove').hidden = !upload;
   $('creditRow').hidden = active?.id !== 'upload';
@@ -72,6 +73,7 @@ function sync() {
   renderSelect();
   refreshShapes();
   showCredit();
+  changed();
 }
 
 async function loadInto(id: string, data: ArrayBuffer, credit: string, paint?: string[]) {

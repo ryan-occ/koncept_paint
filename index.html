@@ -19,7 +19,7 @@
     <button class="btn ghost sm" id="saveBtn" type="button" title="Save mix (Ctrl+S)">Save</button>
   </div>
   <div class="actions">
-    <label class="batch">Batch <input id="batch" type="number" min="50" step="50" value="1000" aria-label="Batch weight in grams"> g</label>
+    <label class="batch">Batch <input id="batch" type="number" min="10" step="10" value="1000" aria-label="Base colour batch in grams"> g</label><button class="chip auto-chip" id="batchAuto" type="button" aria-pressed="true" title="Size the batch from the car, coats and buffer">Auto</button>
     <button class="btn ghost sm" id="copyBtn" type="button">Copy recipe</button>
     <select id="printPageSize" class="sm" aria-label="Print page size"><option value="A4" selected>A4</option><option value="Letter">Letter</option></select>
     <button class="btn sm" id="printBtn" type="button" title="Print mixing sheet (Ctrl+P)">Print sheet</button>
@@ -198,6 +198,25 @@
     </div>
     <div class="panel recipe" role="tabpanel" data-panel="recipe" hidden>
       <h2 id="rTitle">Recipe card</h2>
+      <section class="job" aria-label="Job size and quantities">
+        <h3 class="sub">Job &amp; quantities</h3>
+        <div class="job-grid">
+          <label>Vehicle<select id="jobVehicle"></select></label>
+          <label id="jobCustomRow" hidden>Area (m²)<input id="jobCustom" type="number" min="0" step="0.5"></label>
+          <label>Scope<select id="jobScope"></select></label>
+          <label>Buffer (%)<input id="jobBuffer" type="number" min="0" max="100" step="1"></label>
+        </div>
+        <p class="cover" id="jobArea"></p>
+        <table class="usage"><thead><tr><th>Layer</th><th class="n">Coats</th><th class="n">Ready (L)</th><th class="n">Paint (L)</th><th class="n">Hardener</th><th class="n">Reducer</th></tr></thead><tbody id="usageBody"></tbody></table>
+        <details class="help"><summary>Coverage settings (match your paint's TDS)</summary>
+          <div class="job-grid">
+            <label>Transfer efficiency (%)<input id="jobTe" type="number" min="10" max="100" step="1"></label>
+            <label>Base colour density (kg/L)<input id="jobDensity" type="number" min="0.5" step="0.05"></label>
+          </div>
+          <table class="spec"><thead><tr><th>Layer</th><th>Film per coat (µm)</th><th>Volume solids (%)</th><th>Ratio paint:hardener:reducer</th></tr></thead><tbody id="specBody"></tbody></table>
+          <p>Litres = area × coats × film ÷ (10 × volume solids × transfer efficiency), plus the buffer. With Auto on, the batch weight and mid-coat binder follow this estimate. <button class="chip" id="specReset" type="button">Reset to typical values</button></p>
+        </details>
+      </section>
       <p class="caveat" id="printAngleNotice" role="status" aria-live="polite"></p>
     <details class="sheet-details">
       <summary>Job details for printout (optional)</summary>
@@ -210,6 +229,11 @@
     </details>
     <table><thead><tr><th>Toner</th><th class="n">Parts</th><th class="n">Share</th><th class="n">Weight</th></tr></thead><tbody id="rBody"></tbody></table>
     <div class="layers" id="layers"></div>
+      <section class="travel-box" aria-label="Colour travel">
+        <h3 class="sub">Colour travel by viewing angle</h3>
+        <div id="travel"></div>
+        <p class="cover" style="font-size:12px">Simulated from this paint system. For a licensing or spec document, spray a panel and record measured values. <button class="chip" id="travelCopy" type="button">Copy colour spec</button></p>
+      </section>
     <h3 class="sub">Application guide</h3>
     <div class="lbl">Booth temperature</div>
     <div class="seg light" id="tempSeg" role="group" aria-label="Booth temperature"></div>

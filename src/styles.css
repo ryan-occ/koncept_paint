@@ -153,6 +153,24 @@ h3.sub{font-size:16px;margin:16px 0 6px;color:var(--ink)}
 .view.picking canvas{cursor:crosshair}
 .model-body [hidden],.model-credit[hidden],.model-credit-in[hidden]{display:none}
 
+/* job quantities + colour travel */
+.auto-chip{padding:5px 10px;font-size:12px}
+.job-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px 10px;margin:6px 0}
+.job-grid [hidden]{display:none}
+.job-grid label{display:grid;gap:3px;font-size:12px;color:var(--mute)}
+.job-grid select,.job-grid input,.spec input{font:14px Inter,sans-serif;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--ink);width:100%}
+.usage,.spec{font-size:13px;margin-top:6px}
+.usage td,.usage th,.spec td,.spec th{padding:5px 6px}
+.usage small{color:var(--mute)}
+.spec input{padding:4px 6px;font-size:13px}
+.travel-box{margin-top:16px}
+.travel-strip,.ps-travel{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin:8px 0}
+.travel-strip>div,.ps-travel>div{display:grid;gap:1px;font-size:11px;text-align:center}
+.travel-strip i,.ps-travel i{display:block;height:44px;border-radius:6px;border:1px solid var(--line);margin-bottom:3px}
+.travel-strip b{font-size:12px}
+.travel-strip small,.ps-travel small{color:var(--mute);font-size:10px}
+.ps-travel i{height:14mm;border-color:#999}
+
 /* wide: three panes, no page scroll */
 @media(min-width:1200px){
   body{height:100dvh;overflow:hidden;display:flex;flex-direction:column}
