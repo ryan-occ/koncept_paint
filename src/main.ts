@@ -6,6 +6,7 @@ import { initPhotoMatch } from './ui/photo-match.ts';
 import { initLayout } from './ui/layout.ts';
 import { initCarModel, attachCarModel } from './ui/car-model.ts';
 import { initJob } from './ui/job.ts';
+import { initKitsLibrary } from './ui/kits-library.ts';
 import { $, view } from './ui/store.ts';
 
 async function lockApp() {
@@ -73,6 +74,7 @@ void startIdleLock();
 
 initJob();
 initBench(null);
+initKitsLibrary();
 initCalibration();
 initSearch();
 initPhotoMatch();

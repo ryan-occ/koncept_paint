@@ -55,6 +55,14 @@
         <input id="mixImportFile" type="file" accept=".json,application/json" hidden>
       </div>
       <p class="caveat" id="mixBackupMsg" role="status" aria-live="polite"></p>
+      <h3 class="sub">Koncept Kits library</h3>
+      <div class="chips" id="kitsLibrary"></div>
+      <div class="backup-actions">
+        <button class="btn ghost" id="kitsLibSaveBtn" type="button">Add current mix to library</button>
+        <button class="btn ghost" id="kitsLibPresetsBtn" type="button">Add all starting points</button>
+      </div>
+      <p class="caveat" id="kitsLibMsg" role="status" aria-live="polite"></p>
+      <details class="help"><summary>About the Koncept Kits library</summary><p>Paints here appear in Koncept Kits’ paint picker and are used when it renders a car. Kits gets the colour, the second colour of colour-shift paints and a short finish description, not the recipe. Adding a paint with a name that is already in the library replaces it. Builds that already use a paint keep their colour if you change or remove it here.</p></details>
       <details class="help"><summary>About starting points</summary><p>Every starting point is mixable with the listed materials. Test on a spray-out card; follow your paint system’s TDS for binder, reducer, hardener, and application. Ratios are generic, not manufacturer formulas.</p></details>
     </div>
     <div class="panel" role="tabpanel" data-panel="photo" hidden>

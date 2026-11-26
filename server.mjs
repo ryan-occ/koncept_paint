@@ -4,6 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { createLibraryStore, validateLibraryBatch } from './library-store.mjs';
 
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const DIST = resolve(ROOT, 'dist');
@@ -18,6 +19,9 @@ const { Pool } = pg;
 const databasePool = process.env.DATABASE_URL
   ? new Pool({ connectionString: process.env.DATABASE_URL, max: 4 })
   : null;
+const libraryStore = createLibraryStore(databasePool);
+const LIBRARY_BODY_LIMIT = 512 * 1024;
+const LIBRARY_KEY_MIN_LENGTH = 32;
 
 if (!Number.isSafeInteger(RATE_WINDOW_MS) || RATE_WINDOW_MS < 1000) {
   throw new Error('AUTH_RATE_WINDOW_MS must be an integer of at least 1000 milliseconds.');
@@ -255,14 +259,14 @@ function sendLoginPage(request, response) {
   response.end(request.method === 'HEAD' ? undefined : LOGIN_PAGE);
 }
 
-async function readJson(request) {
+async function readJson(request, limit = 1024) {
   const length = Number(request.headers['content-length'] ?? 0);
-  if (length > 1024) throw Object.assign(new Error('Request is too large.'), { status: 413 });
+  if (length > limit) throw Object.assign(new Error('Request is too large.'), { status: 413 });
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1024) throw Object.assign(new Error('Request is too large.'), { status: 413 });
+    if (size > limit) throw Object.assign(new Error('Request is too large.'), { status: 413 });
     chunks.push(chunk);
   }
   try {
@@ -284,6 +288,64 @@ function setActiveSessionCookie(request, response, expiresAt) {
     request.headers['x-forwarded-proto']?.split(',')[0].trim() === 'https';
   response.setHeader('Set-Cookie',
     `${COOKIE_NAME}=${expiresAt}.${idleExpiresAt}.${sign(expiresAt, idleExpiresAt)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.max(0, Math.ceil((idleExpiresAt - now) / 1000))}${secure ? '; Secure' : ''}`);
+}
+
+/** Compare a supplied key with the configured one without leaking its length or content. */
+function libraryKeyMatches(supplied, expected) {
+  const digest = (value) => createHmac('sha256', 'paint-library-key').update(value).digest();
+  return timingSafeEqual(digest(supplied), digest(expected));
+}
+
+/**
+ * Shared paint library.
+ * - GET /api/library/export: for Koncept Kits, authorised by `Authorization: Bearer PAINT_LIBRARY_KEY`.
+ * - GET/PUT /api/library and DELETE /api/library/:id: for this app's signed-in browser.
+ */
+async function handleLibrary(request, response, url) {
+  try {
+    if (url.pathname === '/api/library/export') {
+      if (request.method !== 'GET') return sendJson(response, 405, { error: 'Method not allowed.' }, { Allow: 'GET' });
+      const key = process.env.PAINT_LIBRARY_KEY?.trim() ?? '';
+      if (key.length < LIBRARY_KEY_MIN_LENGTH) {
+        return sendJson(response, 503, { error: 'Paint library sharing is not configured.' });
+      }
+      const header = request.headers.authorization ?? '';
+      const supplied = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
+      if (!supplied || !libraryKeyMatches(supplied, key)) {
+        return sendJson(response, 401, { error: 'The paint library key is missing or wrong.' }, { 'WWW-Authenticate': 'Bearer' });
+      }
+      return sendJson(response, 200, { paints: await libraryStore.listShared() });
+    }
+
+    if (!hasSession(request)) {
+      if (sessionCookie(request)) clearSessionCookie(request, response);
+      return sendJson(response, 401, { error: 'Your session has ended. Enter the passcode again.' });
+    }
+
+    if (url.pathname === '/api/library') {
+      if (request.method === 'GET') return sendJson(response, 200, { paints: await libraryStore.list() });
+      if (request.method === 'PUT') {
+        if (!request.headers['content-type']?.toLowerCase().startsWith('application/json')) {
+          return sendJson(response, 415, { error: 'Send the paints as JSON.' });
+        }
+        const paints = validateLibraryBatch(await readJson(request, LIBRARY_BODY_LIMIT));
+        await libraryStore.upsert(paints);
+        return sendJson(response, 200, { saved: paints.length, paints: await libraryStore.list() });
+      }
+      return sendJson(response, 405, { error: 'Method not allowed.' }, { Allow: 'GET, PUT' });
+    }
+
+    const match = /^\/api\/library\/(\d{1,9})$/.exec(url.pathname);
+    if (!match) return sendJson(response, 404, { error: 'Not found.' });
+    if (request.method !== 'DELETE') return sendJson(response, 405, { error: 'Method not allowed.' }, { Allow: 'DELETE' });
+    if (!(await libraryStore.remove(Number(match[1])))) return sendJson(response, 404, { error: 'That paint is not in the library.' });
+    secureHeaders(response);
+    response.writeHead(204).end();
+  } catch (error) {
+    if (error?.status) return sendJson(response, error.status, { error: error.message });
+    console.error('Paint library request failed.', error?.message ?? error);
+    return sendJson(response, 500, { error: 'The paint library is unavailable. Try again.' });
+  }
 }
 
 async function handleRequest(request, response, { dev, vite }) {
@@ -360,6 +422,11 @@ async function handleRequest(request, response, { dev, vite }) {
   if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
     clearSessionCookie(request, response);
     return sendJson(response, 200, { authenticated: false });
+  }
+
+  if (url.pathname === '/api/library/export' || url.pathname === '/api/library' ||
+      url.pathname.startsWith('/api/library/')) {
+    return handleLibrary(request, response, url);
   }
 
   if (url.pathname.startsWith('/api/')) return sendJson(response, 404, { error: 'Not found.' });
@@ -464,6 +531,12 @@ export async function startServer({ dev = process.argv.includes('--dev') } = {})
     vite = await createViteServer({
       server: { middlewareMode: true, hmr: { server } },
     });
+  }
+
+  await libraryStore.init();
+  const libraryKey = process.env.PAINT_LIBRARY_KEY?.trim() ?? '';
+  if (libraryKey && libraryKey.length < LIBRARY_KEY_MIN_LENGTH) {
+    console.error(`PAINT_LIBRARY_KEY must be at least ${LIBRARY_KEY_MIN_LENGTH} characters; Koncept Kits cannot read the library until it is.`);
   }
 
   const port = Number(process.env.PORT ?? 5000);

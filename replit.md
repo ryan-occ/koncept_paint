@@ -11,6 +11,15 @@ The imported app uses TypeScript, Vite, and Three.js. Keep its existing structur
 - Set `PASSCODE` to exactly six digits in Replit Secrets. `SESSION_SECRET` signs the app's HTTP-only session cookie.
 - For production, run `npm run build` and then `npm run start`; do not serve `dist/` as static files, which would bypass the gate.
 
+## Koncept Kits paint library
+
+- The **Library** tab's **Koncept Kits library** section saves paints to Postgres (`paint_library`,
+  created on start) for the Koncept Kits app to use when rendering cars.
+- Set `PAINT_LIBRARY_KEY` in Replit Secrets to a random value of 32 or more characters, and the same
+  value in Koncept Kits. Koncept Kits reads `GET /api/library/export` with `Authorization: Bearer <key>`;
+  without the key that endpoint answers 503.
+- Without `DATABASE_URL` the library is kept in memory and lost on restart.
+
 ## Checks
 
 - `npm test` runs auth, colour, calibration, mixing, and print-sheet tests.

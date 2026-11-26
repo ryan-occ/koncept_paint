@@ -12,7 +12,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const inRange = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 
-function isMix(value: unknown): value is Mix {
+export function isMix(value: unknown): value is Mix {
   if (!isRecord(value) || typeof value.n !== 'string' || !value.n.trim()) return false;
   if (!isRecord(value.t) || !Object.keys(value.t).every((id) => tonerIds.has(id))) return false;
   if (!Object.values(value.t).every((parts) => inRange(parts, 0, 1_000_000))) return false;
